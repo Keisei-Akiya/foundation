@@ -28,11 +28,11 @@
 #       timeout: 10
 #       fail_closed: false
 
-# Config protection helper. The original is unchanged; this wrapper adapts edit_file.
-# Blocks existing protected config edits at pre_tool_call; new files are allowed.
+# Config protection via the Rust hook binary. Build with `cargo build --release` first.
+# Blocks edits to existing protected configs at pre_tool_call; new files are allowed.
 # hooks:
 #   pre_tool_call:
-#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/hermes-tool-compat.py" config-protection.py
+#     - command: "'/FOUNDATION_ROOT/target/release/ecc-hermes-hooks' config-protection"
 #       matcher: "^(write_file|edit_file|patch|apply_patch)$"
 #       timeout: 10
 #       fail_closed: false

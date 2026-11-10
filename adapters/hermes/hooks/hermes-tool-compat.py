@@ -9,12 +9,12 @@ import sys
 from pathlib import Path
 
 HOOKS = Path(__file__).resolve().parent
-_ALLOWED = {"config-protection.py", "check-console-log.py"}
+_ALLOWED = {"check-console-log.py"}
 
 
 def main() -> int:
     if len(sys.argv) != 2 or sys.argv[1] not in _ALLOWED:
-        sys.stderr.write("usage: hermes-tool-compat.py {config-protection.py|check-console-log.py}\n")
+        sys.stderr.write("usage: hermes-tool-compat.py check-console-log.py\n")
         return 2
     try:
         payload = json.load(sys.stdin)

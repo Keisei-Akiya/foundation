@@ -1,9 +1,8 @@
-"""Wire-level tests for the two existing ECC shell hooks.
+"""Wire-level tests for the remaining upstream ECC shell hook.
 
 Hermes shell hooks receive ``hook_event_name``, ``tool_name`` and a dict
-``tool_input`` on stdin. Their event registration is supplied separately in
-``hooks.yaml``; these tests exercise the copied commands with those production
-payloads and assert the response shapes Hermes' shell-hook parser consumes.
+``tool_input`` on stdin. These tests exercise the console observer with those
+production payloads and check its non-blocking output.
 """
 from __future__ import annotations
 
@@ -37,30 +36,6 @@ def run_hook(script: str, event: str, tool: str, tool_input: dict[str, str], cwd
 
 
 class ExistingHermesHooksTests(unittest.TestCase):
-    def test_config_protection_blocks_existing_config_on_pre_tool_call(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            config = root / ".prettierrc"
-            config.write_text("{}\n")
-            result = run_hook("config-protection.py", "pre_tool_call", "write_file", {"path": str(config)}, root)
-            response = json.loads(result.stdout)
-            self.assertEqual(result.returncode, 0)
-            self.assertEqual(response["decision"], "block")
-            self.assertIn("BLOCKED", response["reason"])
-
-    def test_config_protection_allows_new_config_and_non_config_file(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            missing = root / "eslint.config.js"
-            result = run_hook("config-protection.py", "pre_tool_call", "write_file", {"path": str(missing)}, root)
-            self.assertEqual(result.returncode, 0)
-            self.assertEqual(result.stdout, "")
-            ordinary = root / "app.py"
-            ordinary.write_text("print('ok')\n")
-            result = run_hook("config-protection.py", "pre_tool_call", "write_file", {"path": str(ordinary)}, root)
-            self.assertEqual(result.returncode, 0)
-            self.assertEqual(result.stdout, "")
-
     def test_console_log_warns_after_matching_file_tool_but_never_blocks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

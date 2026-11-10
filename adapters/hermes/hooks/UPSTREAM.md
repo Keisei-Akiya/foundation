@@ -1,9 +1,9 @@
 # Upstream attribution
 
-The following files are verbatim copies from ECC at commit
+The following files were verbatim copies from ECC at commit
 `d2ef2680594f9a17526a6e1a2e18b3d242c5d17b`:
 
-- `config-protection.py` — upstream `hooks/hermes/config-protection.py` (ECC hook #7).
+- `config-protection.py` — formerly copied from upstream `hooks/hermes/config-protection.py` (ECC hook #7); the Python implementation has since been removed in favor of the Rust `ecc-hermes-hooks config-protection` binary.
 - `check-console-log.py` — upstream `hooks/hermes/check-console-log.py` (ECC hook #22).
 
 Copyright (c) 2026 Affaan Mustafa. Both files are distributed under the MIT License.
@@ -34,7 +34,7 @@ permission notice is reproduced here:
 
 ## Hermes event applicability
 
-`config-protection.py` is a `pre_tool_call` guard. It emits the Hermes
+`config-protection.py` was a `pre_tool_call` guard. It emitted the Hermes
 `{"decision":"block","reason":"..."}` response only for existing protected
 config files and recognized edit tools.
 

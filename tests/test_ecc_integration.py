@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -58,14 +59,63 @@ def _hermes_shell_hooks(monkeypatch, tmp_path):
     return module, manager, home
 
 
-def test_sample_command_is_argv_safe_and_resolves(monkeypatch, tmp_path):
-    """Commands in the public example remain parseable when paths contain spaces."""
-    example = (HOOKS / "hooks.example.yaml").read_text()
-    assert "FOUNDATION_ROOT" in example
-    command = f'python3 "{HOOKS / "preflight_policies.py"}"'
+def test_sample_command_is_argv_safe_and_resolves():
+    """Each commented sample command resolves to the intended executable argv."""
+    sample = (HOOKS / "hooks.example.yaml").read_text(encoding="utf-8")
+    command_lines = [
+        line.partition("command:")[2].strip()
+        for line in sample.splitlines()
+        if line.lstrip().startswith("#") and "command:" in line
+    ]
+    assert command_lines, "expected opt-in command examples in hooks.example.yaml"
+
+    for raw_command in command_lines:
+        command = YAML().load(raw_command).replace("/FOUNDATION_ROOT", str(FOUNDATION))
+        argv = shlex.split(command)
+        assert argv, f"empty argv for sample command: {raw_command}"
+
+        if argv[0] == "python3":
+            assert len(argv) >= 2
+            assert (FOUNDATION / argv[1].removeprefix(str(FOUNDATION) + "/")).is_file()
+            assert argv[1].startswith(str(FOUNDATION) + "/adapters/hermes/hooks/")
+        else:
+            assert Path(argv[0]).is_file(), f"sample executable does not resolve: {argv[0]}"
+            assert argv[1:] == ["config-protection"]
+
+
+def test_installed_config_protection_runs_from_path_with_spaces_in_real_runner(monkeypatch, tmp_path):
+    """The installer's printed command survives YAML and Hermes shell parsing."""
+    module, manager, _home = _hermes_shell_hooks(monkeypatch, tmp_path)
+    isolated_home = tmp_path / "isolated Hermes home"
+    installer = HOOKS / "install-config-protection.sh"
+    result = subprocess.run(
+        [str(installer), "--install", "--hermes-home", str(isolated_home)],
+        check=True, capture_output=True, text=True,
+    )
+    raw_command = next(
+        line.partition("command:")[2].strip()
+        for line in result.stdout.splitlines()
+        if line.lstrip().startswith("- command:")
+    )
+    command = YAML().load(raw_command)
     argv = shlex.split(command)
-    assert Path(argv[1]).is_file()
-    assert argv[0] == "python3"
+    binary = isolated_home / "bin" / "ecc-hermes-hooks"
+    assert argv == [str(binary), "config-protection"]
+    assert binary.is_file()
+
+    protected = tmp_path / ".prettierrc"
+    protected.write_text("{}\\n", encoding="utf-8")
+    registered = module.register_from_config({"hooks": {"pre_tool_call": [{
+        "command": command, "matcher": "^(write_file|edit_file|patch|apply_patch)$",
+        "timeout": 10, "fail_closed": False,
+    }]}}, accept_hooks=True)
+    assert len(registered) == 1
+    callback = manager._hooks["pre_tool_call"][0]
+    blocked = callback(tool_name="edit_file", args={"path": str(protected), "new_string": "bad"})
+    allowed = callback(tool_name="edit_file", args={"path": str(tmp_path / "app.py"), "content": "ok"})
+    assert blocked and blocked["action"] == "block"
+    assert allowed is None
+    assert (isolated_home / "config.yaml").is_file() is False
 
 
 def test_real_registration_and_block_allow_firing_in_isolated_home(monkeypatch, tmp_path):
@@ -98,25 +148,6 @@ def test_real_registration_and_block_allow_firing_in_isolated_home(monkeypatch, 
     spec = registered[0]
     run_once = module.run_once(spec, {"tool_name": "terminal", "args": {"command": "git commit --no-verify"}})
     assert run_once["parsed"]["action"] == "block"
-
-
-def test_real_runner_config_protection_preflight_allows_and_blocks_edit_file(monkeypatch, tmp_path):
-    module, manager, _home = _hermes_shell_hooks(monkeypatch, tmp_path)
-    config = tmp_path / ".prettierrc"
-    config.write_text("{}\\n")
-    wrapper = HOOKS / "hermes-tool-compat.py"
-    command = f'{shlex.quote(sys.executable)} {shlex.quote(str(wrapper))} config-protection.py'
-    registered = module.register_from_config({"hooks": {"pre_tool_call": [{
-        "command": command, "matcher": "^(write_file|patch|edit_file)$",
-        "timeout": 5, "fail_closed": False,
-    }]}}, accept_hooks=True)
-    assert len(registered) == 1
-    callback = manager._hooks["pre_tool_call"][0]
-    blocked = callback(tool_name="edit_file", args={"path": str(config), "new_string": "bad"})
-    allowed = callback(tool_name="edit_file", args={"path": str(tmp_path / "app.py"), "content": "ok"})
-    assert blocked and blocked["action"] == "block"
-    assert "BLOCKED" in blocked["message"]
-    assert allowed is None
 
 
 def test_real_runner_console_checker_uses_file_event_tool_matcher(monkeypatch, tmp_path, caplog):
