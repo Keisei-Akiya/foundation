@@ -1,0 +1,30 @@
+[tasks.python-test]
+description = "Run the Python test suite with the locked uv environment"
+run = "env PYTHONDONTWRITEBYTECODE=1 uv run --locked pytest -q -p no:cacheprovider"
+
+[tasks.rust-test]
+description = "Run the Rust test suite without changing Cargo.lock"
+run = "cargo test --locked"
+
+[tools]
+lefthook = "2.2.2"
+
+[tasks.lint-check]
+description = "Check Rust Clippy and Python Ruff lint in the working tree"
+run = "cargo clippy --all-targets --all-features --locked -- -D warnings && uv run --locked ruff check ."
+
+[tasks.fmt-check]
+description = "Check Rust formatting and the pre-commit fixer Python script in the working tree"
+run = "cargo fmt --all -- --check && uv run --locked ruff format --check scripts/check-staged.py"
+
+[tasks.fix-checks]
+description = "Auto-fix staged Rust/Python files in an isolated index snapshot, then validate"
+run = "python3 scripts/check-staged.py fix"
+
+[tasks.test]
+description = "Run the Python and Rust test suites sequentially"
+run = "mise run python-test && mise run rust-test"
+
+[tasks.check]
+description = "Run all tests, lint checks, and formatting checks sequentially"
+run = "mise run python-test && mise run rust-test && mise run lint-check && mise run fmt-check"
