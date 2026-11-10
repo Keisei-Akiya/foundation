@@ -1,0 +1,57 @@
+# Paste only one selected entry under `hooks:` in ~/.hermes/config.yaml.
+# Replace FOUNDATION_ROOT with the absolute checkout path; retain quoted script paths.
+# Hermes parses command as argv (shell=False), so shell expansions and pipes do not work.
+# Each entry requires separate user consent for its exact event/command pair.
+
+# Narrow preflight blocker: literal `git commit --no-verify` and documented PowerShell cases.
+# hooks:
+#   pre_tool_call:
+#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/preflight_policies.py"
+#       matcher: "^(terminal|bash|Bash|powershell|PowerShell|powershell_tool|pwsh)$"
+#       timeout: 5
+#       fail_closed: false
+
+# Hookify rule evaluator; inspect its configured rules before enabling.
+# Supports both shell and file rules; matcher must include both tool families.
+# hooks:
+#   pre_tool_call:
+#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/hookify_runtime.py"
+#       matcher: "^(terminal|bash|Bash|read_file|write_file|patch|edit_file|apply_patch)$"
+#       timeout: 5
+#       fail_closed: false
+
+# Post-tool observer; cannot veto a tool that has already run.
+# hooks:
+#   post_tool_call:
+#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/post_dispatch.py"
+#       matcher: "^(write_file|edit_file|patch|apply_patch)$"
+#       timeout: 10
+#       fail_closed: false
+
+# Config protection helper. The original is unchanged; this wrapper adapts edit_file.
+# Blocks existing protected config edits at pre_tool_call; new files are allowed.
+# hooks:
+#   pre_tool_call:
+#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/hermes-tool-compat.py" config-protection.py
+#       matcher: "^(write_file|edit_file|patch|apply_patch)$"
+#       timeout: 10
+#       fail_closed: false
+
+# Console-log observer. The original is unchanged; wrapper adapts edit_file.
+# stderr is captured only in Hermes debug logs and is not user-visible; this warning
+# cannot reliably alert users and must not be treated as a surfaced notification.
+# hooks:
+#   post_tool_call:
+#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/hermes-tool-compat.py" check-console-log.py
+#       matcher: "^(write_file|edit_file|patch|apply_patch)$"
+#       timeout: 10
+#       fail_closed: false
+
+# Lifecycle helper; inspect environment/control requirements before opting in.
+# hooks:
+#   post_tool_call:
+#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/lifecycle.py"
+#       timeout: 10
+#       fail_closed: false
+
+# stop_lifecycle.py is intentionally absent: it is not registered/connected here.
