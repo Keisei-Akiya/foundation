@@ -1,0 +1,26 @@
+[tools]
+lefthook = "2.2.2"
+
+[tasks.rust-test]
+description = "Run Rust tests without changing Cargo.lock"
+run = "cargo test --locked"
+
+[tasks.lint-check]
+description = "Check Rust Clippy"
+run = "cargo clippy --all-targets --all-features --locked -- -D warnings"
+
+[tasks.fmt-check]
+description = "Check Rust formatting without modifying files"
+run = "cargo fmt --all -- --check"
+
+[tasks.test]
+description = "Run the Rust test suite"
+run = "mise run rust-test"
+
+[tasks.check]
+description = "Run Rust tests, lint, and formatting checks"
+run = "mise run rust-test && mise run lint-check && mise run fmt-check"
+
+[tasks.precommit]
+description = "Auto-format staged Rust files and check the staged snapshot"
+run = "cargo run --quiet --locked --bin precommit --"

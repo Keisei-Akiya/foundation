@@ -1,0 +1,50 @@
+# Paste one selected entry under `hooks:` in ~/.hermes/config.yaml.
+# Replace FOUNDATION_ROOT with the absolute checkout path. Hermes parses command as argv;
+# keep the executable path quoted as one argument, then put the Rust subcommand next.
+# Build first: cargo build --release
+
+# Stateless pre-tool blocking preflight. Emits {"action":"block","message":...}.
+# Only verified literal patterns are blocked; no state, audit, or advisory channel.
+# hooks:
+#   pre_tool_call:
+#     - command: "/FOUNDATION_ROOT/target/release/ecc-hermes-hooks" preflight
+#       matcher: "^(terminal|bash|Bash|powershell|PowerShell|powershell_tool|pwsh)$"
+#       timeout: 5
+#       fail_closed: false
+
+# Hookify evaluator for .claude/hookify.*.local.md; emits {"decision":"block","reason":...}.
+# Supports bash and file event rules using the actual cwd/tool_input payload.
+# hooks:
+#   pre_tool_call:
+#     - command: "/FOUNDATION_ROOT/target/release/ecc-hermes-hooks" hookify
+#       matcher: "^(terminal|bash|Bash|read_file|write_file|patch|edit_file|apply_patch)$"
+#       timeout: 5
+#       fail_closed: false
+
+# Existing protected config edits only; new files remain allowed.
+# hooks:
+#   pre_tool_call:
+#     - command: "/FOUNDATION_ROOT/target/release/ecc-hermes-hooks" config-protection
+#       matcher: "^(write_file|edit_file|patch|apply_patch)$"
+#       timeout: 10
+#       fail_closed: false
+
+# Read-only post-edit observer combines console-log and related source signals.
+# It writes warnings to stderr (not guaranteed user-visible), never blocks.
+# hooks:
+#   post_tool_call:
+#     - command: "/FOUNDATION_ROOT/target/release/ecc-hermes-hooks" post-observer
+#       matcher: "^(write_file|edit_file|patch|apply_patch|Edit|Write|MultiEdit)$"
+#       timeout: 10
+#       fail_closed: false
+
+# Privacy-minimal lifecycle logging is disabled unless ECC_HERMES_SKILL_TRACK=1
+# is explicitly set in the hook process environment. Requires HERMES_HOME.
+# hooks:
+#   post_tool_call:
+#     - command: "/FOUNDATION_ROOT/target/release/ecc-hermes-hooks" lifecycle
+#       matcher: "^skill$"
+#       timeout: 10
+#       fail_closed: false
+
+# stop_lifecycle was not connected in the shipped sample and is removed, not ported.
