@@ -1,33 +1,13 @@
-# Hermes shell hooks
+# Hermes hooks (Rust)
 
-Hermes shell hooks are user-configured entries under `hooks:` in `~/.hermes/config.yaml`; each `command` is executed as an argv (not through a shell), and the subprocess receives the event JSON on stdin. See [`hooks.example.yaml`](hooks.example.yaml) for individually commented opt-ins. Copy only the entries you intend to enable, and replace `FOUNDATION_ROOT` with the absolute path to this checkout. Quote the script path in the command so paths containing spaces remain one argv item. No user configuration is edited by this adapter.
+Build the executable with `cargo build --release`. The executable reads one JSON object from stdin (maximum 1 MiB). Hook commands in `hooks.example.yaml` are argv: the binary path is one quoted argument and the Rust subcommand is the next argument. The examples are opt-in and are not installed into Hermes configuration automatically.
 
-## Enable one hook at a time
+| Subcommand | Event and behavior | Output/limits |
+|---|---|---|
+| `preflight` | `pre_tool_call`; narrowly blocks literal `git commit --no-verify` and selected destructive PowerShell command forms. | Hermes blocking JSON `action` + `message`; lexical checks, not a shell parser. |
+| `hookify` | `pre_tool_call`; reads flat scalar `hookify.*.local.md` rules from the project `.claude` directory, for `bash` and `file` events with block action. | Hermes blocking JSON `decision` + `reason`; malformed or unsupported rules fail open. |
+| `config-protection` | `pre_tool_call`; blocks writes to existing protected configuration filenames. | Hermes blocking JSON `decision` + `reason`; new files are allowed. |
+| `post-observer` | `post_tool_call`; reads supported source files and observes console calls plus selected design signals. | stderr warning only; read-only and cannot block. Hermes may capture stderr only in debug logs. |
+| `lifecycle` | `post_tool_call` for the Skill tool; records minimal skill id/version/outcome. | Disabled by default; enable process environment `ECC_HERMES_SKILL_TRACK=1`; requires `HERMES_HOME`; writes JSONL with restrictive permissions. |
 
-1. Inspect the script and the exact command in `hooks.example.yaml`.
-2. Substitute the checkout's absolute path for `FOUNDATION_ROOT`; retain the quotes around the script path.
-3. Copy only that hook entry into `~/.hermes/config.yaml` under `hooks:`. Leave the other examples commented out.
-4. Approve the exact event/command pair at Hermes' prompt, or use Hermes' explicit `--accept-hooks`/`HERMES_ACCEPT_HOOKS=1` opt-in. Do not enable `hooks_auto_accept` globally just to install one example.
-5. Run `hermes hooks list` and exercise the matching event with a safe test input.
-
-The scripts are independent alternatives, not an all-or-nothing bundle. `preflight_policies.py` only blocks its documented narrow lexical cases. `hookify_runtime.py` applies configured rules at `pre_tool_call`; inspect its rule/config inputs before enabling. `post_dispatch.py` is a post-tool observer and cannot block the action that already ran. Config protection is implemented by the Rust binary `ecc-hermes-hooks config-protection`; build it with `cargo build --release` before using the sample registration. `check-console-log.py` is a separate opt-in helper. `lifecycle.py` includes extra environment-based controls; enable it only after reviewing those requirements. `stop_lifecycle.py` is helper code only and is not wired by this sample.
-
-Hermes captures shell-hook stderr only in debug logging (`agent/shell_hooks.py`); stderr messages are not user-visible warnings. The console checker therefore cannot reliably alert a user. Do not rely on stderr for alerts. A hook's supported blocking directive is emitted as JSON on stdout for blocking-capable events.
-
-`check-console-log.py` remains a verbatim upstream copy. Hermes exposes the editor as `edit_file`, while this original recognizes `edit`; the example command uses `hermes-tool-compat.py` to translate that tool name without modifying the copy. Config protection no longer uses the Python compatibility wrapper: `ecc-hermes-hooks config-protection` handles Hermes tool names directly and is registered at `pre_tool_call` so it can block before an edit. The console observer is registered at `post_tool_call` and matches file-editing tools, not `terminal`.
-
-For installation, explicit config application, consent, verification, and rollback, see [`INSTALL.md`](INSTALL.md). The helper script is [`install-config-protection.sh`](install-config-protection.sh); it builds the binary and only stages it under Hermes home when passed `--install`, never edits `config.yaml` or approves hooks.
-
-## Verify the integration
-
-From the foundation checkout, run:
-
-```sh
-uv run --no-project --with pytest --with ruamel.yaml pytest -q tests/test_ecc_integration.py
-```
-
-The integration checks need a Hermes source checkout containing `agent/shell_hooks.py`. Set `HERMES_AGENT_DIR` to its root to select it explicitly; otherwise the test searches `~/.hermes/hermes-agent` and `hermes-agent` folders alongside the test's parent directories. If none is found, only tests that need the Hermes source are skipped; the sample YAML check still runs. To exercise the Hermes integration, configure a valid checkout rather than treating a skip as a pass of those checks.
-
-The integration tests import Hermes' real `agent/shell_hooks.py`, register Python-constructed hook configurations against an isolated temporary `HERMES_HOME`, then invoke registered callbacks for blocking and permitted inputs. They do not parse/load the commented sample hook registrations from `hooks.example.yaml`; the sample file is checked separately for valid YAML (all registrations remain commented). The tests do not modify the real Hermes home or user config.
-
-Hermes adapter integration documentation and sample registrations are in English so upstream syntax and event names stay explicit.
+`check-console-log` is merged into `post-observer`; no compatibility wrapper is needed. `stop_lifecycle` was not connected in the shipped sample and was intentionally removed rather than ported. This is a purpose-limited adapter, not a complete port of all ECC hooks: see `INVENTORY.md` for the boundaries. Live Hermes callback integration has not been tested here.

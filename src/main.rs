@@ -1,6 +1,5 @@
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::io::{self, Read, Write};
-use std::path::Path;
 
 const PROTECTED: &[&str] = &[
     ".eslintrc",
@@ -46,88 +45,17 @@ const EDIT_TOOLS: &[&str] = &[
     "apply_patch",
     "str_replace_editor",
 ];
-const PATH_KEYS: &[&str] = &["path", "file_path", "filePath"];
+const MAX_STDIN: usize = 1_048_576;
 
 fn warn(message: &str) {
-    eprintln!("[ecc-config-protection] {message}");
+    eprintln!("[ecc-config-protection] {message}")
 }
-
 fn as_nonempty_string(value: Option<&Value>) -> Option<&str> {
     value
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
 }
-
-fn run_config_protection(payload: &Value) {
-    let Some(object) = payload.as_object() else {
-        warn(&format!(
-            "payload is {}, not an object — allowing",
-            json_type(payload)
-        ));
-        return;
-    };
-    let tool = object
-        .get("tool_name")
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    if !EDIT_TOOLS.contains(&tool) {
-        return;
-    }
-    let input_value = object.get("tool_input").filter(|v| !v.is_null());
-    let Some(input) = input_value.and_then(Value::as_object) else {
-        warn("tool_input is not an object — allowing");
-        return;
-    };
-    let mut candidates = Vec::new();
-    for key in [
-        "path",
-        "file_path",
-        "filePath",
-        "target",
-        "filename",
-        "notebook_path",
-    ] {
-        if let Some(path) = as_nonempty_string(input.get(key)) {
-            candidates.push(path.to_owned());
-        }
-    }
-    for key in ["edits", "operations"] {
-        if let Some(items) = input.get(key).and_then(Value::as_array) {
-            for item in items {
-                if let Some(item) = item.as_object() {
-                    for key in PATH_KEYS {
-                        if let Some(path) = as_nonempty_string(item.get(*key)) {
-                            candidates.push(path.to_owned());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if candidates.is_empty() {
-        warn(&format!(
-            "no path found in tool_input for tool {tool:?} — allowing"
-        ));
-        return;
-    }
-    for candidate in candidates {
-        let base = Path::new(&candidate)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
-        if PROTECTED.contains(&base.to_lowercase().as_str())
-            && std::fs::symlink_metadata(&candidate).is_ok()
-        {
-            let result = json!({"decision":"block", "reason": format!(
-                "BLOCKED: modifying {base} is not allowed. Fix the source code so the linter/formatter passes instead of weakening the config. For a legitimate config change, ask the owner to edit it directly."
-            )});
-            println!("{result}");
-            return;
-        }
-    }
-}
-
 fn json_type(value: &Value) -> &'static str {
     match value {
         Value::Null => "NoneType",
@@ -139,31 +67,113 @@ fn json_type(value: &Value) -> &'static str {
     }
 }
 
+fn input() -> Option<Value> {
+    let mut raw = String::new();
+    if io::stdin()
+        .take((MAX_STDIN + 1) as u64)
+        .read_to_string(&mut raw)
+        .is_err()
+        || raw.len() > MAX_STDIN
+    {
+        return None;
+    }
+    serde_json::from_str(&raw).ok()
+}
+
+fn frontmatter(text: &str) -> Option<(std::collections::HashMap<String, String>, String)> {
+    let mut lines = text.lines();
+    if lines.next()?.trim() != "---" {
+        return None;
+    }
+    let mut map = std::collections::HashMap::new();
+    let mut body = String::new();
+    let mut ended = false;
+    for line in lines {
+        if !ended && line.trim() == "---" {
+            ended = true;
+            continue;
+        }
+        if ended {
+            body.push_str(line);
+            body.push('\n');
+            continue;
+        }
+        if line.trim().is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+        if line.starts_with(char::is_whitespace) {
+            return None;
+        }
+        let (key, val) = line.split_once(':')?;
+        let key = key.trim();
+        let mut val = val.trim().to_string();
+        if key.is_empty()
+            || !key.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+            || map.contains_key(key)
+            || val.starts_with(['[', '{', '|', '>'])
+        {
+            return None;
+        }
+        if val.len() >= 2
+            && ((val.starts_with('"') && val.ends_with('"'))
+                || (val.starts_with('\'') && val.ends_with('\'')))
+        {
+            val = val[1..val.len() - 1].to_string();
+        }
+        if let Some((before, _)) = val.split_once(" #") {
+            val = before.trim().to_string();
+        }
+        map.insert(key.to_string(), val);
+    }
+    if ended {
+        Some((map, body.trim().to_string()))
+    } else {
+        None
+    }
+}
+
+fn valid_id(v: &str, max: usize, extra: &str) -> bool {
+    !v.is_empty()
+        && v.len() <= max
+        && v.split('/').all(|p| p != "." && p != "..")
+        && v.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._".contains(c) || extra.contains(c))
+}
+
+mod config_protection;
+mod hookify;
+mod lifecycle;
+mod post_observer;
+mod preflight;
+
 fn main() {
     let mut args = std::env::args().skip(1);
-    match (args.next().as_deref(), args.next()) {
-        (Some("config-protection"), None) => {}
-        _ => {
-            eprintln!("usage: ecc-hermes-hooks config-protection");
-            std::process::exit(2);
-        }
+    let command = args.next().unwrap_or_default();
+    if args.next().is_some()
+        || ![
+            "config-protection",
+            "preflight",
+            "hookify",
+            "post-observer",
+            "lifecycle",
+        ]
+        .contains(&command.as_str())
+    {
+        eprintln!(
+            "usage: ecc-hermes-hooks <config-protection|preflight|hookify|post-observer|lifecycle>"
+        );
+        std::process::exit(2);
     }
-    let mut raw = String::new();
-    if let Err(error) = io::stdin().read_to_string(&mut raw) {
-        warn(&format!("could not read payload ({error}) — allowing"));
+    let Some(payload) = input() else {
         return;
-    }
-    let payload = if raw.trim().is_empty() {
-        json!({})
-    } else {
-        match serde_json::from_str::<Value>(&raw) {
-            Ok(payload) => payload,
-            Err(error) => {
-                warn(&format!("unparseable payload ({error}) — allowing"));
-                return;
-            }
-        }
     };
-    run_config_protection(&payload);
+    match command.as_str() {
+        "config-protection" => config_protection::run_config_protection(&payload),
+        "preflight" => preflight::preflight(&payload),
+        "hookify" => hookify::hookify(&payload),
+        "post-observer" => post_observer::post_observer(&payload),
+        "lifecycle" => lifecycle::lifecycle(&payload),
+        _ => unreachable!(),
+    }
     let _ = io::stdout().flush();
 }

@@ -8,4 +8,5 @@ name = "ecc-hermes-hooks"
 path = "src/main.rs"
 
 [dependencies]
+regex = "1"
 serde_json = "1"

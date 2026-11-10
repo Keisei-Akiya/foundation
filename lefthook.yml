@@ -1,5 +1,5 @@
 pre-commit:
   parallel: false
   commands:
-    fix-checks:
-      run: python3 scripts/check-staged.py fix
+    precommit:
+      run: mise run precommit

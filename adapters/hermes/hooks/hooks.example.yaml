@@ -1,57 +1,50 @@
-# Paste only one selected entry under `hooks:` in ~/.hermes/config.yaml.
-# Replace FOUNDATION_ROOT with the absolute checkout path; retain quoted script paths.
-# Hermes parses command as argv (shell=False), so shell expansions and pipes do not work.
-# Each entry requires separate user consent for its exact event/command pair.
+# Paste one selected entry under `hooks:` in ~/.hermes/config.yaml.
+# Replace FOUNDATION_ROOT with the absolute checkout path. Hermes parses command as argv;
+# keep the executable path quoted as one argument, then put the Rust subcommand next.
+# Build first: cargo build --release
 
-# Narrow preflight blocker: literal `git commit --no-verify` and documented PowerShell cases.
+# Stateless pre-tool blocking preflight. Emits {"action":"block","message":...}.
+# Only verified literal patterns are blocked; no state, audit, or advisory channel.
 # hooks:
 #   pre_tool_call:
-#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/preflight_policies.py"
+#     - command: "/FOUNDATION_ROOT/target/release/ecc-hermes-hooks" preflight
 #       matcher: "^(terminal|bash|Bash|powershell|PowerShell|powershell_tool|pwsh)$"
 #       timeout: 5
 #       fail_closed: false
 
-# Hookify rule evaluator; inspect its configured rules before enabling.
-# Supports both shell and file rules; matcher must include both tool families.
+# Hookify evaluator for .claude/hookify.*.local.md; emits {"decision":"block","reason":...}.
+# Supports bash and file event rules using the actual cwd/tool_input payload.
 # hooks:
 #   pre_tool_call:
-#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/hookify_runtime.py"
+#     - command: "/FOUNDATION_ROOT/target/release/ecc-hermes-hooks" hookify
 #       matcher: "^(terminal|bash|Bash|read_file|write_file|patch|edit_file|apply_patch)$"
 #       timeout: 5
 #       fail_closed: false
 
-# Post-tool observer; cannot veto a tool that has already run.
-# hooks:
-#   post_tool_call:
-#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/post_dispatch.py"
-#       matcher: "^(write_file|edit_file|patch|apply_patch)$"
-#       timeout: 10
-#       fail_closed: false
-
-# Config protection via the Rust hook binary. Build with `cargo build --release` first.
-# Blocks edits to existing protected configs at pre_tool_call; new files are allowed.
+# Existing protected config edits only; new files remain allowed.
 # hooks:
 #   pre_tool_call:
-#     - command: "'/FOUNDATION_ROOT/target/release/ecc-hermes-hooks' config-protection"
+#     - command: "/FOUNDATION_ROOT/target/release/ecc-hermes-hooks" config-protection
 #       matcher: "^(write_file|edit_file|patch|apply_patch)$"
 #       timeout: 10
 #       fail_closed: false
 
-# Console-log observer. The original is unchanged; wrapper adapts edit_file.
-# stderr is captured only in Hermes debug logs and is not user-visible; this warning
-# cannot reliably alert users and must not be treated as a surfaced notification.
+# Read-only post-edit observer combines console-log and related source signals.
+# It writes warnings to stderr (not guaranteed user-visible), never blocks.
 # hooks:
 #   post_tool_call:
-#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/hermes-tool-compat.py" check-console-log.py
-#       matcher: "^(write_file|edit_file|patch|apply_patch)$"
+#     - command: "/FOUNDATION_ROOT/target/release/ecc-hermes-hooks" post-observer
+#       matcher: "^(write_file|edit_file|patch|apply_patch|Edit|Write|MultiEdit)$"
 #       timeout: 10
 #       fail_closed: false
 
-# Lifecycle helper; inspect environment/control requirements before opting in.
+# Privacy-minimal lifecycle logging is disabled unless ECC_HERMES_SKILL_TRACK=1
+# is explicitly set in the hook process environment. Requires HERMES_HOME.
 # hooks:
 #   post_tool_call:
-#     - command: python3 "/FOUNDATION_ROOT/adapters/hermes/hooks/lifecycle.py"
+#     - command: "/FOUNDATION_ROOT/target/release/ecc-hermes-hooks" lifecycle
+#       matcher: "^skill$"
 #       timeout: 10
 #       fail_closed: false
 
-# stop_lifecycle.py is intentionally absent: it is not registered/connected here.
+# stop_lifecycle was not connected in the shipped sample and is removed, not ported.
