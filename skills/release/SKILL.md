@@ -28,6 +28,6 @@ version更新の要否は判断せず、下の基準で機械的に決める。
 ## 手順
 
 1. `Cargo.toml` の `version` を上げる。0.0.x の間はpatchだけを上げる。
-2. `Cargo.lock` の `ecc-hermes-hooks` のversionも同じ値にそろえる。
+2. `Cargo.lock` の `foundation` のversionも同じ値にそろえる。
 3. READMEの例にあるversion（`--version X.Y.Z`）も新しい値に更新する。
 4. mainへマージしたら、`release` workflowの成功と `gh release view v<version>` で成果物の存在を確認する。

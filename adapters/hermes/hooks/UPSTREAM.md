@@ -2,7 +2,7 @@
 
 The behavior of the following hooks was derived from ECC files at commit
 `d2ef2680594f9a17526a6e1a2e18b3d242c5d17b`. The upstream Python originals have
-been removed; the behavior is now implemented in the Rust `ecc-hermes-hooks` binary:
+been removed; the behavior is now implemented in the Rust `foundation` binary:
 
 - config-protection — derived from ECC's Hermes config-protection hook (ECC hook #7). Implemented by the `config-protection` subcommand.
 - check-console-log — derived from ECC's Hermes check-console-log hook (ECC hook #22). Implemented as the console-log check in the `post-observer` subcommand.

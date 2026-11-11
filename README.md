@@ -11,10 +11,10 @@ GitHub Releases のビルド済み成果物を取得し、SHA256を検証して�
 curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
 ```
 
-バージョンを固定する場合は `sh -s -- --version 0.0.2` を付ける。
+バージョンを固定する場合は `sh -s -- --version 0.0.3` を付ける。
 配置先は次のとおり。
 
-- `<HERMES_HOME>/bin/ecc-hermes-hooks`
+- `<HERMES_HOME>/bin/foundation`
 - `<HERMES_HOME>/foundation/`（adapters、skills、docs、VERSION）
 
 既定ではインストーラーは `config.yaml`、hook許可設定、起動中のgatewayを変更しない。
@@ -26,7 +26,7 @@ hookを選んで有効にするには `<HERMES_HOME>/foundation/adapters/hermes/
 curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --enable-hooks
 ```
 
-導入済みなら `<HERMES_HOME>/bin/ecc-hermes-hooks enable` だけでもよい。
+導入済みなら `<HERMES_HOME>/bin/foundation enable` だけでもよい。
 `--dry-run` を付けると変更内容の表示のみで書き込まない。
 `enable` は次の動作をする。
 
@@ -39,7 +39,7 @@ curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/instal
 Rustがある環境では次でも導入できる。この方式はバイナリのみを配置し、adapters等は含まない。
 
 ```sh
-cargo install --git https://github.com/Keisei-Akiya/foundation --locked --bin ecc-hermes-hooks
+cargo install --git https://github.com/Keisei-Akiya/foundation --locked --bin foundation
 ```
 
 ## リリース手順

@@ -166,7 +166,7 @@ fn main() {
         .contains(&command.as_str())
     {
         eprintln!(
-            "usage: ecc-hermes-hooks <config-protection|preflight|hookify|post-observer|lifecycle|enable>"
+            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|enable>"
         );
         std::process::exit(2);
     }

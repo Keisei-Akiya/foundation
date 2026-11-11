@@ -38,7 +38,7 @@ fn event(tool: &str, input_field: &str, path: &Path) -> String {
 }
 
 fn run_rust(payload: &str) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_ecc-hermes-hooks"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_foundation"));
     command.arg("config-protection");
     run_command(&mut command, payload)
 }

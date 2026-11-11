@@ -2,7 +2,7 @@
 # foundation installer.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version 0.0.2
+#   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version 0.0.3
 #
 # Downloads the prebuilt release from GitHub Releases, verifies its SHA256, then
 # installs into <HERMES_HOME>. By default it never edits config.yaml or hook
@@ -21,7 +21,7 @@ usage() {
   cat <<EOF
 Usage: install.sh [--version X.Y.Z] [--hermes-home DIR] [--enable-hooks]
 
-Installs foundation (ecc-hermes-hooks binary, adapters, skills, docs).
+Installs foundation (foundation binary, adapters, skills, docs).
 
   --version X.Y.Z    Release to install (default: latest).
   --enable-hooks     Also enable all hooks: back up config.yaml, append a hooks
@@ -29,7 +29,7 @@ Installs foundation (ecc-hermes-hooks binary, adapters, skills, docs).
   --hermes-home DIR  Target Hermes home (default: \$HERMES_HOME or ~/.hermes).
 
 Installed paths:
-  <HERMES_HOME>/bin/ecc-hermes-hooks
+  <HERMES_HOME>/bin/foundation
   <HERMES_HOME>/foundation/   (adapters, skills, docs, VERSION)
 
 Environment:
@@ -94,7 +94,7 @@ printf 'SHA256 verified.\n'
 mkdir -p "$tmp/x"
 tar -xzf "$tmp/$ASSET" -C "$tmp/x"
 src="$tmp/x/foundation"
-[ -x "$src/bin/ecc-hermes-hooks" ] || die "archive is missing bin/ecc-hermes-hooks"
+[ -x "$src/bin/foundation" ] || die "archive is missing bin/foundation"
 [ -f "$src/VERSION" ] || die "archive is missing VERSION"
 installed_version="$(cat "$src/VERSION")"
 
@@ -102,8 +102,8 @@ bin_dir="$hermes_home/bin"
 share_dir="$hermes_home/foundation"
 mkdir -p "$bin_dir" "$hermes_home"
 
-install -m 0755 "$src/bin/ecc-hermes-hooks" "$bin_dir/ecc-hermes-hooks.new"
-mv -f "$bin_dir/ecc-hermes-hooks.new" "$bin_dir/ecc-hermes-hooks"
+install -m 0755 "$src/bin/foundation" "$bin_dir/foundation.new"
+mv -f "$bin_dir/foundation.new" "$bin_dir/foundation"
 rm -rf "$src/bin"
 
 # Replace the shared tree in two renames so a failure leaves the old copy intact.
@@ -117,7 +117,7 @@ rm -rf "$share_dir.old"
 cat <<EOF
 
 Installed foundation $installed_version
-  binary: $bin_dir/ecc-hermes-hooks
+  binary: $bin_dir/foundation
   files : $share_dir
 
 EOF
@@ -125,15 +125,15 @@ EOF
 if [ "$enable_hooks" = "1" ]; then
   # Opt-in only. Backs up config.yaml, appends a hooks block, approves exactly
   # these hook commands in the allowlist. Never restarts Hermes.
-  "$bin_dir/ecc-hermes-hooks" enable --hermes-home "$hermes_home" --bin "$bin_dir/ecc-hermes-hooks" \
+  "$bin_dir/foundation" enable --hermes-home "$hermes_home" --bin "$bin_dir/foundation" \
     || die "enabling hooks failed (the install itself is complete)"
 else
   cat <<EOF
 No Hermes config, hook allowlist, or running gateway was changed.
 To enable all hooks automatically, re-run with --enable-hooks, or run:
-  $bin_dir/ecc-hermes-hooks enable
+  $bin_dir/foundation enable
 To enable selectively, review $share_dir/adapters/hermes/hooks/INSTALL.md and copy
 only the entry you want from hooks.example.yaml. Use this command path:
-  $bin_dir/ecc-hermes-hooks
+  $bin_dir/foundation
 EOF
 fi

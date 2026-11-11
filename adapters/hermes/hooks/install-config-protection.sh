@@ -7,7 +7,7 @@ usage() {
   cat <<'EOF'
 Usage: install-config-protection.sh [--install] [--hermes-home DIR]
 
-Builds target/release/ecc-hermes-hooks from this checkout and prints a Hermes
+Builds target/release/foundation from this checkout and prints a Hermes
 hooks: snippet. With --install, copies the binary to <HERMES_HOME>/bin/ but
 still does not edit Hermes configuration or approve/run the hook.
 
@@ -38,12 +38,12 @@ repo_root="$(cd -- "$script_dir/../../.." && pwd -P)"
 manifest="$repo_root/Cargo.toml"
 [[ -f "$manifest" ]] || { echo "Cargo.toml not found at $manifest" >&2; exit 1; }
 
-cargo build --release --manifest-path "$manifest" --bin ecc-hermes-hooks
-built="$repo_root/target/release/ecc-hermes-hooks"
+cargo build --release --manifest-path "$manifest" --bin foundation
+built="$repo_root/target/release/foundation"
 [[ -x "$built" ]] || { echo "build succeeded but executable is missing: $built" >&2; exit 1; }
 
 if ((install_binary)); then
-  destination="$hermes_home/bin/ecc-hermes-hooks"
+  destination="$hermes_home/bin/foundation"
   mkdir -p -- "$(dirname -- "$destination")"
   install -m 0755 -- "$built" "$destination"
 else
@@ -65,5 +65,5 @@ yaml_command=${shell_command//\'/\'\'}
 printf "    - command: '%s'\n" "$yaml_command"
 printf '      matcher: "^(write_file|edit_file|patch|apply_patch)$"\n'
 printf '      timeout: 10\n'
-printf '      fail_closed: false\n'
+printf '      fail_closed: true\n'
 printf '\nNo Hermes config, hook allowlist, or running gateway was changed.\n'
