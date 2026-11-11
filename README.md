@@ -2,6 +2,36 @@
 
 ECCからHermesへのhook移植調査、各種アダプター、テスト、ドキュメントを整理して管理する。対応範囲の根拠は `adapters/hermes/hooks/INVENTORY.md` のECC 27 registration調査を参照。調査時の全件を移植したとは主張しない。
 
+## インストール
+
+Linux x86_64 のみ対応する。
+GitHub Releases のビルド済み成果物を取得し、SHA256を検証してから `<HERMES_HOME>`（既定 `~/.hermes`）に配置する。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
+```
+
+バージョンを固定する場合は `sh -s -- --version 0.1.0` を付ける。
+配置先は次のとおり。
+
+- `<HERMES_HOME>/bin/ecc-hermes-hooks`
+- `<HERMES_HOME>/foundation/`（adapters、skills、docs、VERSION）
+
+インストーラーは `config.yaml`、hook許可設定、起動中のgatewayを変更しない。
+hookを有効にするには `<HERMES_HOME>/foundation/adapters/hermes/hooks/INSTALL.md` を確認し、`hooks.example.yaml` から必要なentryだけを明示的に選択する。
+
+Rustがある環境では次でも導入できる。この方式はバイナリのみを配置し、adapters等は含まない。
+
+```sh
+cargo install --git https://github.com/Keisei-Akiya/foundation --locked --bin ecc-hermes-hooks
+```
+
+## リリース手順
+
+1. `Cargo.toml` の `version` を更新してmainへマージする。
+2. `v<version>` のタグをpushする。
+3. `release` workflowが、タグとCargo.tomlのversion一致確認、テスト、muslビルド、tar.gzとSHA256の生成、インストーラーのスモークテスト、Release公開を行う。
+
 ## Rust 開発・テスト
 
 Rustup/Cargoは既存の管理環境を利用する。mise toolsではRustをインストールしない。Python製hook、Python依存・実行設定は本リポジトリから撤去済み。

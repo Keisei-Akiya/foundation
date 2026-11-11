@@ -1,0 +1,42 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TARGET: x86_64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Tag must match Cargo.toml version
+        run: |
+          cargo_version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n1)"
+          [ "v$cargo_version" = "$GITHUB_REF_NAME" ] || {
+            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $cargo_version" >&2
+            exit 1
+          }
+      - name: Test
+        run: cargo test --locked
+      - name: Build
+        run: |
+          rustup target add "$TARGET"
+          cargo build --release --locked --target "$TARGET" --bin ecc-hermes-hooks
+      - name: Package
+        run: scripts/package-release.sh "$TARGET" dist
+      - name: Smoke test installer against the built asset
+        run: |
+          FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes"
+          test -x "$RUNNER_TEMP/hermes/bin/ecc-hermes-hooks"
+          test -f "$RUNNER_TEMP/hermes/foundation/adapters/hermes/hooks/hooks.example.yaml"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
