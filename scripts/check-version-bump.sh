@@ -5,7 +5,7 @@ set -euo pipefail
 
 base="${1:?usage: check-version-bump.sh <base-ref>}"
 
-# version を上げるべきパス。skills/release/SKILL.md の基準と同じ内容を保つ。
+# version を上げるべきパス。.agents/skills/release/SKILL.md の基準と同じ内容を保つ。
 dist_paths=(src adapters skills install.sh scripts/package-release.sh Cargo.lock)
 
 read_version() { sed -n 's/^version = "\(.*\)"$/\1/p' | head -n1; }
@@ -27,5 +27,5 @@ fi
 
 echo "配布物に影響する変更があるが version が $head_version のまま:" >&2
 echo "$changed" | sed 's/^/  /' >&2
-echo "Cargo.toml と Cargo.lock の version を上げる。基準は skills/release/SKILL.md を参照。" >&2
+echo "Cargo.toml と Cargo.lock の version を上げる。基準は .agents/skills/release/SKILL.md を参照。" >&2
 exit 1
