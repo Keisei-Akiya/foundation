@@ -11,7 +11,8 @@ decision model は、文章を生成せず、与えた入力に対する構造�
 
 ## 提供元
 
-- Jev / Microsoft-Decision-1: Microsoft Foundry 経由で呼ぶ。TypeSafe の System One 系モデルである。
+- Jev は TypeSafe が提供する System One 系モデルである。Microsoft Foundry にデプロイされたモデルとして扱わない。
+- Microsoft-Decision-1 は Jev と区別する。Microsoft Foundry 側ではデプロイ名を指定して呼び出す。
 - OpenAI Decisions API: `POST /v1/decisions`。既定モデルは `gpt-6-luna`。
 
 Jev の背景は jev wiki（`wiki/entities/jev.md`、`wiki/concepts/system-one-models.md`）を参照する。
