@@ -11,13 +11,14 @@ decision model は、文章を生成せず、与えた入力に対する構造�
 
 ## 提供元
 
-- Jev は TypeSafe が提供する System One 系モデルである。Microsoft Foundry にデプロイされたモデルとして扱わない。
-- Microsoft-Decision-1 は Jev と区別する。Microsoft Foundry 側ではデプロイ名を指定して呼び出す。
-- OpenAI Decisions API: `POST /v1/decisions`。既定モデルは `gpt-6-luna`。
+- Jev は TypeSafe の System One 系モデルである。TypeSafe の公式ドキュメントでは、Jev を「TypeSafe's flagship model and the first System One model」と説明している。TypeSafe の API の `POST /v1/systemone` に `model` として `jev-latest` などを指定して呼び出す。Microsoft Foundry にデプロイして使うモデルではない。
+- Microsoft-Decision-1 は Microsoft が Foundry のモデルカタログで公開している decision モデルであり、public preview である。Microsoft の発表によると Qwen3.5-9B をベースにしており、Jev とは別のモデルである。Foundry のリソースにデプロイし、`POST <resource-endpoint>/providers/microsoft/v1/systemone` で呼び出す。リクエストの `model` には基盤モデル名ではなくデプロイ名を指定する。認証には Microsoft Entra ID または `api-key` ヘッダーを使う。Microsoft Learn はリクエストパターンが System One API に似ていると説明しているが、提供元もモデルも Jev とは異なる。
+- OpenAI Decisions API は `POST /v1/decisions` で呼び出す。公式ドキュメントによると、現時点で対応するモデルは `gpt-6-luna` のみである。質問の種類は `predicate`、`choice`、`score` である。
 
-Jev の背景は jev wiki（`wiki/entities/jev.md`、`wiki/concepts/system-one-models.md`）を参照する。
-仕様の一次情報は Microsoft Learn の Foundry decision 解説と OpenAI の Decisions API ドキュメントである。
-このスキルに書いていない詳細は、推測せず一次情報を確認する。
+Jev の背景は wiki（`wiki/entities/jev.md`、`wiki/concepts/system-one-models.md`）を参照する。
+仕様の一次情報は https://docs.typesafe.ai/concepts/system-one、https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision、https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/introducing-microsoft-decision-1-in-microsoft-foundry-for-decision-and-classific/4562742、https://developers.openai.com/api/docs/guides/decisions である。
+このスキルに書いていない詳細は推測せず、一次情報を確認する。
+2026-11-12 に確認した。
 
 ## 質問の種類
 
