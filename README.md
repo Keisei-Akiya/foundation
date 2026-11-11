@@ -29,8 +29,11 @@ cargo install --git https://github.com/Keisei-Akiya/foundation --locked --bin ec
 ## リリース手順
 
 1. `Cargo.toml` の `version` を更新してmainへマージする。
-2. `v<version>` のタグをpushする。
-3. `release` workflowが、タグとCargo.tomlのversion一致確認、テスト、muslビルド、tar.gzとSHA256の生成、インストーラーのスモークテスト、Release公開を行う。
+2. `release` workflowがmainへのpushで動き、`v<version>` のタグが無い場合だけリリースする。
+3. リリースではテスト、muslビルド、tar.gzとSHA256の生成、インストーラーのスモークテスト、Release公開を行い、タグも自動で付く。
+
+versionを上げずにマージした場合は、タグが既にあるためリリースされない。
+手動でタグをpushする必要はない。
 
 ## Rust 開発・テスト
 
