@@ -1,11 +1,18 @@
 name: release
 
+# main へのpushで動く。Cargo.toml の version に対応するタグが無いときだけリリースする。
+# タグは Release 作成時に自動で付く。
+
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -14,29 +21,40 @@ jobs:
       TARGET: x86_64-unknown-linux-musl
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Tag must match Cargo.toml version
+      - name: Decide whether to release
+        id: check
         run: |
-          cargo_version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n1)"
-          [ "v$cargo_version" = "$GITHUB_REF_NAME" ] || {
-            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $cargo_version" >&2
-            exit 1
-          }
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n1)"
+          [ -n "$version" ] || { echo "cannot read version from Cargo.toml" >&2; exit 1; }
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "tag v$version already exists; skipping release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Test
+        if: steps.check.outputs.release == 'true'
         run: cargo test --locked
       - name: Build
+        if: steps.check.outputs.release == 'true'
         run: |
           rustup target add "$TARGET"
           cargo build --release --locked --target "$TARGET" --bin ecc-hermes-hooks
       - name: Package
+        if: steps.check.outputs.release == 'true'
         run: scripts/package-release.sh "$TARGET" dist
       - name: Smoke test installer against the built asset
+        if: steps.check.outputs.release == 'true'
         run: |
           FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes"
           test -x "$RUNNER_TEMP/hermes/bin/ecc-hermes-hooks"
           test -f "$RUNNER_TEMP/hermes/foundation/adapters/hermes/hooks/hooks.example.yaml"
-      - name: Publish
+      - name: Publish (creates the tag)
+        if: steps.check.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.check.outputs.tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+          gh release create "$TAG" dist/* \
+            --target "$GITHUB_SHA" --title "$TAG" --generate-notes
