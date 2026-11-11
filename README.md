@@ -11,7 +11,7 @@ GitHub Releases のビルド済み成果物を取得し、SHA256を検証して�
 curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
 ```
 
-バージョンを固定する場合は `sh -s -- --version 0.1.0` を付ける。
+バージョンを固定する場合は `sh -s -- --version 0.0.1` を付ける。
 配置先は次のとおり。
 
 - `<HERMES_HOME>/bin/ecc-hermes-hooks`
