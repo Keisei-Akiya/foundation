@@ -40,7 +40,7 @@ jobs:
         if: steps.check.outputs.release == 'true'
         run: |
           rustup target add "$TARGET"
-          cargo build --release --locked --target "$TARGET" --bin ecc-hermes-hooks
+          cargo build --release --locked --target "$TARGET" --bin foundation
       - name: Package
         if: steps.check.outputs.release == 'true'
         run: scripts/package-release.sh "$TARGET" dist
@@ -48,7 +48,7 @@ jobs:
         if: steps.check.outputs.release == 'true'
         run: |
           FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes"
-          test -x "$RUNNER_TEMP/hermes/bin/ecc-hermes-hooks"
+          test -x "$RUNNER_TEMP/hermes/bin/foundation"
           test -f "$RUNNER_TEMP/hermes/foundation/adapters/hermes/hooks/hooks.example.yaml"
           test ! -e "$RUNNER_TEMP/hermes/config.yaml"
           FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes" --enable-hooks
