@@ -433,12 +433,24 @@ fn does_not_follow_redirects_with_request_body_or_auth() {
     let addr = listener.local_addr().unwrap();
     let server = thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
         let mut request = Vec::new();
         let mut byte = [0u8; 1];
         while !request.ends_with(b"\r\n\r\n") {
             stream.read_exact(&mut byte).unwrap();
             request.push(byte[0]);
         }
+        let headers = String::from_utf8_lossy(&request).to_ascii_lowercase();
+        let content_length = headers
+            .lines()
+            .find_map(|line| line.strip_prefix("content-length: "))
+            .unwrap()
+            .parse::<usize>()
+            .unwrap();
+        let mut body = vec![0; content_length];
+        stream.read_exact(&mut body).unwrap();
         write!(stream, "HTTP/1.1 302 Found\r\nLocation: http://{destination_addr}/steal\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
     });
     let (code, _, err) = run(
