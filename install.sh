@@ -2,11 +2,11 @@
 # foundation installer.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version 0.0.1
+#   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version 0.0.2
 #
 # Downloads the prebuilt release from GitHub Releases, verifies its SHA256, then
-# installs into <HERMES_HOME>. It never edits config.yaml, hook allowlists, or
-# restarts Hermes.
+# installs into <HERMES_HOME>. By default it never edits config.yaml or hook
+# allowlists and never restarts Hermes; --enable-hooks opts in to enabling hooks.
 set -eu
 
 REPO="Keisei-Akiya/foundation"
@@ -14,15 +14,18 @@ TARGET="x86_64-unknown-linux-musl"
 ASSET="foundation-$TARGET.tar.gz"
 
 version="latest"
+enable_hooks=0
 hermes_home="${HERMES_HOME:-${HOME:?HOME is not set}/.hermes}"
 
 usage() {
   cat <<EOF
-Usage: install.sh [--version X.Y.Z] [--hermes-home DIR]
+Usage: install.sh [--version X.Y.Z] [--hermes-home DIR] [--enable-hooks]
 
 Installs foundation (ecc-hermes-hooks binary, adapters, skills, docs).
 
   --version X.Y.Z    Release to install (default: latest).
+  --enable-hooks     Also enable all hooks: back up config.yaml, append a hooks
+                     block, and approve those hooks in the allowlist (opt-in).
   --hermes-home DIR  Target Hermes home (default: \$HERMES_HOME or ~/.hermes).
 
 Installed paths:
@@ -44,6 +47,7 @@ while [ $# -gt 0 ]; do
     --hermes-home)
       [ $# -ge 2 ] || die "missing value for --hermes-home"
       hermes_home="$2"; shift ;;
+    --enable-hooks) enable_hooks=1 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument: $1" ;;
   esac
@@ -116,8 +120,20 @@ Installed foundation $installed_version
   binary: $bin_dir/ecc-hermes-hooks
   files : $share_dir
 
+EOF
+
+if [ "$enable_hooks" = "1" ]; then
+  # Opt-in only. Backs up config.yaml, appends a hooks block, approves exactly
+  # these hook commands in the allowlist. Never restarts Hermes.
+  "$bin_dir/ecc-hermes-hooks" enable --hermes-home "$hermes_home" --bin "$bin_dir/ecc-hermes-hooks" \
+    || die "enabling hooks failed (the install itself is complete)"
+else
+  cat <<EOF
 No Hermes config, hook allowlist, or running gateway was changed.
-To enable a hook, review $share_dir/adapters/hermes/hooks/INSTALL.md and copy
+To enable all hooks automatically, re-run with --enable-hooks, or run:
+  $bin_dir/ecc-hermes-hooks enable
+To enable selectively, review $share_dir/adapters/hermes/hooks/INSTALL.md and copy
 only the entry you want from hooks.example.yaml. Use this command path:
   $bin_dir/ecc-hermes-hooks
 EOF
+fi

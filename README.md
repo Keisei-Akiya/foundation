@@ -11,14 +11,30 @@ GitHub Releases のビルド済み成果物を取得し、SHA256を検証して�
 curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
 ```
 
-バージョンを固定する場合は `sh -s -- --version 0.0.1` を付ける。
+バージョンを固定する場合は `sh -s -- --version 0.0.2` を付ける。
 配置先は次のとおり。
 
 - `<HERMES_HOME>/bin/ecc-hermes-hooks`
 - `<HERMES_HOME>/foundation/`（adapters、skills、docs、VERSION）
 
-インストーラーは `config.yaml`、hook許可設定、起動中のgatewayを変更しない。
-hookを有効にするには `<HERMES_HOME>/foundation/adapters/hermes/hooks/INSTALL.md` を確認し、`hooks.example.yaml` から必要なentryだけを明示的に選択する。
+既定ではインストーラーは `config.yaml`、hook許可設定、起動中のgatewayを変更しない。
+hookを選んで有効にするには `<HERMES_HOME>/foundation/adapters/hermes/hooks/INSTALL.md` を確認し、`hooks.example.yaml` から必要なentryだけを明示的に選択する。
+
+全hookを自動で有効にする場合は `--enable-hooks` を付ける（任意）。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --enable-hooks
+```
+
+導入済みなら `<HERMES_HOME>/bin/ecc-hermes-hooks enable` だけでもよい。
+`--dry-run` を付けると変更内容の表示のみで書き込まない。
+`enable` は次の動作をする。
+
+- `config.yaml` を `config.yaml.bak-<時刻>` にバックアップしてから、末尾に `hooks:` ブロック（5件）を追記する。
+- `shell-hooks-allowlist.json` に同じ5件の `(event, command)` だけを承認として記録する。`hooks_auto_accept` は設定しない。
+- `config.yaml` に既に `hooks:` セクションがある場合は、自動マージせず何も変更せずに終了する。手動で `hooks.example.yaml` を反映する。
+- 何度実行しても結果は同じ（冪等）。gatewayの再起動は不要で、実行中のgatewayは約30秒で反映する。
+- 反映の確認は `hermes hooks doctor` で行う。
 
 Rustがある環境では次でも導入できる。この方式はバイナリのみを配置し、adapters等は含まない。
 

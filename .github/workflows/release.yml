@@ -50,6 +50,10 @@ jobs:
           FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes"
           test -x "$RUNNER_TEMP/hermes/bin/ecc-hermes-hooks"
           test -f "$RUNNER_TEMP/hermes/foundation/adapters/hermes/hooks/hooks.example.yaml"
+          test ! -e "$RUNNER_TEMP/hermes/config.yaml"
+          FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes" --enable-hooks
+          test "$(grep -c -- '- command:' "$RUNNER_TEMP/hermes/config.yaml")" = 5
+          test "$(grep -c '"command"' "$RUNNER_TEMP/hermes/shell-hooks-allowlist.json")" = 5
       - name: Publish (creates the tag)
         if: steps.check.outputs.release == 'true'
         env:
