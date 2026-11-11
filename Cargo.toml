@@ -1,10 +1,10 @@
 [package]
-name = "ecc-hermes-hooks"
-version = "0.0.2"
+name = "foundation"
+version = "0.0.3"
 edition = "2021"
 
 [[bin]]
-name = "ecc-hermes-hooks"
+name = "foundation"
 path = "src/main.rs"
 
 [dependencies]

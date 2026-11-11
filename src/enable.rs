@@ -1,4 +1,4 @@
-//! `ecc-hermes-hooks enable`: register every foundation hook in Hermes.
+//! `foundation enable`: register every foundation hook in Hermes.
 //!
 //! Appends a `hooks:` block to `<HERMES_HOME>/config.yaml` and records consent for exactly those
 //! `(event, command)` pairs in `<HERMES_HOME>/shell-hooks-allowlist.json`.
@@ -15,6 +15,8 @@ struct HookDef {
     sub: &'static str,
     matcher: &'static str,
     timeout: u32,
+    /// Only meaningful for `pre_tool_call`: block the tool call when the hook itself fails.
+    fail_closed: bool,
 }
 
 const HOOKS: &[HookDef] = &[
@@ -23,30 +25,35 @@ const HOOKS: &[HookDef] = &[
         sub: "preflight",
         matcher: "^(terminal|bash|Bash|powershell|PowerShell|powershell_tool|pwsh)$",
         timeout: 5,
+        fail_closed: false,
     },
     HookDef {
         event: "pre_tool_call",
         sub: "hookify",
         matcher: "^(terminal|bash|Bash|read_file|write_file|patch|edit_file|apply_patch)$",
         timeout: 5,
+        fail_closed: false,
     },
     HookDef {
         event: "pre_tool_call",
         sub: "config-protection",
         matcher: "^(write_file|edit_file|patch|apply_patch)$",
         timeout: 10,
+        fail_closed: true,
     },
     HookDef {
         event: "post_tool_call",
         sub: "post-observer",
         matcher: "^(write_file|edit_file|patch|apply_patch|Edit|Write|MultiEdit)$",
         timeout: 10,
+        fail_closed: false,
     },
     HookDef {
         event: "post_tool_call",
         sub: "lifecycle",
         matcher: "^skill$",
         timeout: 10,
+        fail_closed: false,
     },
 ];
 
@@ -85,10 +92,11 @@ fn hooks_block(bin: &str) -> String {
         out.push_str(&format!("  {event}:\n"));
         for h in HOOKS.iter().filter(|h| h.event == event) {
             out.push_str(&format!(
-                "    - command: '{}'\n      matcher: '{}'\n      timeout: {}\n      fail_closed: false\n",
+                "    - command: '{}'\n      matcher: '{}'\n      timeout: {}\n      fail_closed: {}\n",
                 command_for(bin, h.sub),
                 h.matcher,
-                h.timeout
+                h.timeout,
+                h.fail_closed
             ));
         }
     }
@@ -125,7 +133,7 @@ Add the entries from hooks.example.yaml by hand."
     if !out.is_empty() {
         out.push('\n');
     }
-    out.push_str("# Added by ecc-hermes-hooks enable\n");
+    out.push_str("# Added by foundation enable\n");
     out.push_str(&hooks_block(bin));
     Ok(ConfigPlan::Write(out))
 }
@@ -348,7 +356,7 @@ fn run_inner(args: &[String]) -> Result<(), String> {
 
 pub fn run(args: &[String]) {
     if let Err(e) = run_inner(args) {
-        eprintln!("ecc-hermes-hooks enable: {e}");
+        eprintln!("foundation enable: {e}");
         std::process::exit(1);
     }
 }
@@ -357,7 +365,7 @@ pub fn run(args: &[String]) {
 mod tests {
     use super::*;
 
-    const BIN: &str = "/home/u/.hermes/bin/ecc-hermes-hooks";
+    const BIN: &str = "/home/u/.hermes/bin/foundation";
 
     #[test]
     fn appends_to_empty_and_plain_config() {
@@ -369,10 +377,30 @@ mod tests {
             panic!()
         };
         assert!(b.starts_with("model: x\n\n# Added by"));
-        assert!(b.contains("    - command: '\"/home/u/.hermes/bin/ecc-hermes-hooks\" lifecycle'\n"));
+        assert!(b.contains("    - command: '\"/home/u/.hermes/bin/foundation\" lifecycle'\n"));
         for h in HOOKS {
             assert!(b.contains(&command_for(BIN, h.sub)));
         }
+    }
+
+    #[test]
+    fn fail_closed_only_for_config_protection() {
+        let ConfigPlan::Write(out) = plan_config(None, BIN).unwrap() else {
+            panic!()
+        };
+        for h in HOOKS {
+            let entry = format!(
+                "    - command: '{}'\n      matcher: '{}'\n      timeout: {}\n      fail_closed: {}\n",
+                command_for(BIN, h.sub),
+                h.matcher,
+                h.timeout,
+                h.sub == "config-protection"
+            );
+            assert!(out.contains(&entry), "unexpected entry for {}", h.sub);
+        }
+        assert!(HOOKS
+            .iter()
+            .all(|h| h.event == "pre_tool_call" || !h.fail_closed));
     }
 
     #[test]

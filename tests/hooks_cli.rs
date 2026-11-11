@@ -3,7 +3,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 fn invoke(args: &[&str], input: &str) -> (i32, String, String) {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_ecc-hermes-hooks"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_foundation"))
         .env_remove("ECC_HERMES_SKILL_TRACK")
         .args(args)
         .stdin(Stdio::piped())

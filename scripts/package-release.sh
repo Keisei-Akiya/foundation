@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Package a release tarball from an already built binary.
 # Usage: package-release.sh <target-triple> <output-dir>
-# Expects target/<target-triple>/release/ecc-hermes-hooks (or target/release/ when
+# Expects target/<target-triple>/release/foundation (or target/release/ when
 # FOUNDATION_BIN is set to an explicit path).
 
 usage() {
@@ -16,7 +16,7 @@ target=$1
 out_dir=$2
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-bin="${FOUNDATION_BIN:-$repo_root/target/$target/release/ecc-hermes-hooks}"
+bin="${FOUNDATION_BIN:-$repo_root/target/$target/release/foundation}"
 [[ -x "$bin" ]] || { echo "binary not found: $bin" >&2; exit 1; }
 
 version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$repo_root/Cargo.toml" | head -n1)"
@@ -27,7 +27,7 @@ trap 'rm -rf -- "$stage"' EXIT
 root="$stage/foundation"
 mkdir -p "$root/bin"
 
-install -m 0755 -- "$bin" "$root/bin/ecc-hermes-hooks"
+install -m 0755 -- "$bin" "$root/bin/foundation"
 printf '%s\n' "$version" > "$root/VERSION"
 for path in adapters skills docs README.md AGENTS.md; do
   cp -R -- "$repo_root/$path" "$root/$path"
