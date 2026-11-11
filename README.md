@@ -1,6 +1,10 @@
 # foundation
 
-ECCからHermesへのhook移植調査、各種アダプター、テスト、ドキュメントを整理して管理する。対応範囲の根拠は `adapters/hermes/hooks/INVENTORY.md` のECC 27 registration調査を参照。調査時の全件を移植したとは主張しない。
+`foundation` は、リポジトリ全体で一つのHermesプラグインである。
+ECCからHermesへのhook移植、アダプター、スキル、テスト、ドキュメントを一式として管理し、一つのバージョンで配布する。
+`adapters/`、`skills/`、`docs/`、バイナリはその構成要素であり、個別の製品ではない。
+対応範囲の根拠は `adapters/hermes/hooks/INVENTORY.md` のECC 27 registration調査を参照。
+調査時の全件を移植したとは主張しない。
 
 ## インストール
 
