@@ -141,13 +141,19 @@ fn valid_id(v: &str, max: usize, extra: &str) -> bool {
 }
 
 mod config_protection;
+mod enable;
 mod hookify;
 mod lifecycle;
 mod post_observer;
 mod preflight;
 
 fn main() {
-    let mut args = std::env::args().skip(1);
+    let all: Vec<String> = std::env::args().skip(1).collect();
+    if all.first().map(String::as_str) == Some("enable") {
+        enable::run(&all[1..]);
+        return;
+    }
+    let mut args = all.into_iter();
     let command = args.next().unwrap_or_default();
     if args.next().is_some()
         || ![
@@ -160,7 +166,7 @@ fn main() {
         .contains(&command.as_str())
     {
         eprintln!(
-            "usage: ecc-hermes-hooks <config-protection|preflight|hookify|post-observer|lifecycle>"
+            "usage: ecc-hermes-hooks <config-protection|preflight|hookify|post-observer|lifecycle|enable>"
         );
         std::process::exit(2);
     }
