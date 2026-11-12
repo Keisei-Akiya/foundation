@@ -141,6 +141,7 @@ fn valid_id(v: &str, max: usize, extra: &str) -> bool {
 }
 
 mod config_protection;
+mod decide;
 mod enable;
 mod hookify;
 mod lifecycle;
@@ -152,6 +153,9 @@ fn main() {
     if all.first().map(String::as_str) == Some("enable") {
         enable::run(&all[1..]);
         return;
+    }
+    if all.first().map(String::as_str) == Some("decide") {
+        std::process::exit(decide::run(&all[1..]));
     }
     let mut args = all.into_iter();
     let command = args.next().unwrap_or_default();
@@ -166,7 +170,7 @@ fn main() {
         .contains(&command.as_str())
     {
         eprintln!(
-            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|enable>"
+            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|enable|decide>"
         );
         std::process::exit(2);
     }
