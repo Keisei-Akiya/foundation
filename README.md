@@ -59,7 +59,7 @@ versionを上げずにマージした場合は、タグが既にあるためリ�
 
 ## Rust 開発・テスト
 
-Rustup/Cargoは既存の管理環境を利用する。mise toolsではRustをインストールしない。Python製hook、Python依存・実行設定は本リポジトリから撤去済み。
+Rustup/Cargoは既存の管理環境を利用する。mise toolsではRustやPythonをインストールしない。Hermes実行環境用のPythonはruntime test実行時に指定する。
 
 ```sh
 cargo build --release
@@ -68,6 +68,7 @@ mise run check
 ```
 
 `mise run check`はRustテスト、Clippy、format checkを作業ツリーに対して非変更で実行する。残るHermes shell hooksは `adapters/hermes/hooks/hooks.example.yaml` を確認し、必要なentryのみ明示的に選択する。
+Hermes実行環境がある場合は `HERMES_PYTHON=/path/to/hermes/python mise run runtime-test` で、隔離 `HERMES_HOME` におけるネイティブpluginのHermes hook dispatcher接続も検査する。手順と制約は `docs/runtime-testing.md` を参照。
 
 `mise run precommit`はヘルパーを作業ツリーからビルドして起動する。
 そのため、ヘルパー自身の未コミット変更はそのhookでは検証されていない。

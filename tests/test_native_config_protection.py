@@ -1,14 +1,12 @@
 import importlib.util
 import os
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
+from hermes_runtime import BINARY_PATH, IsolatedHermesHome, REPO_ROOT
 
 PLUGIN_PATH = Path(__file__).parents[1] / "adapters/hermes/plugin/__init__.py"
-REPO_ROOT = PLUGIN_PATH.parents[3]
-BINARY_PATH = Path(__file__).parents[1] / "target/debug/foundation"
 SPEC = importlib.util.spec_from_file_location("foundation_plugin", PLUGIN_PATH)
 assert SPEC is not None and SPEC.loader is not None
 plugin = importlib.util.module_from_spec(SPEC)
@@ -25,32 +23,19 @@ class HookContext:
 
 class NativeConfigProtectionTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="foundation-native-plugin-")
-        self.addCleanup(self.temp.cleanup)
-        self.home = Path(self.temp.name)
-        self.hermes_home = self.home / ".hermes"
-        self.bin_dir = self.hermes_home / "bin"
-        self.bin_dir.mkdir(parents=True)
-        self.old_home = os.environ.get("HERMES_HOME")
-        self.old_binary = os.environ.get("FOUNDATION_BIN")
-        os.environ["HERMES_HOME"] = str(self.hermes_home)
-        os.environ.pop("FOUNDATION_BIN", None)
-        self.addCleanup(self._restore_environment)
-
-    def _restore_environment(self):
-        if self.old_home is None:
-            os.environ.pop("HERMES_HOME", None)
-        else:
-            os.environ["HERMES_HOME"] = self.old_home
-        if self.old_binary is None:
-            os.environ.pop("FOUNDATION_BIN", None)
-        else:
-            os.environ["FOUNDATION_BIN"] = self.old_binary
+        self.runtime = IsolatedHermesHome()
+        self.runtime.__enter__()
+        self.addCleanup(self.runtime.__exit__, None, None, None)
+        self.home = self.runtime.root
+        self.hermes_home = self.runtime.home
+        self.bin_dir = self.runtime.bin
 
     def _install_real_binary(self):
         self.assertTrue(BINARY_PATH.is_file(), "build foundation before running this suite")
-        shutil.copy2(BINARY_PATH, self.bin_dir / "foundation")
-        (self.bin_dir / "foundation").chmod(0o755)
+        if not (self.bin_dir / "foundation").exists():
+            import shutil
+            shutil.copy2(BINARY_PATH, self.bin_dir / "foundation")
+            (self.bin_dir / "foundation").chmod(0o755)
 
     def _callback(self):
         context = HookContext()
@@ -117,10 +102,10 @@ class NativeConfigProtectionTests(unittest.TestCase):
         with patch.object(plugin, "run_subcommand", return_value=None) as run_subcommand:
             for tool_name in ("patch", "write_file", "edit", "edit_file", "write", "apply_patch", "str_replace_editor"):
                 self.assertIsNone(callback(tool_name=tool_name, args={"path": str(self.home / "src/main.rs")}))
-        self.assertEqual(run_subcommand.call_count, 14)
+        self.assertEqual(run_subcommand.call_count, 28)
         self.assertEqual(
             [call.args[0] for call in run_subcommand.call_args_list],
-            [name for _ in range(7) for name in ("hookify", "config-protection")],
+            [name for _ in range(7) for name in ("observe", "governance-capture", "hookify", "config-protection")],
         )
 
     def test_non_edit_tool_does_not_run_config_protection(self):
@@ -129,8 +114,7 @@ class NativeConfigProtectionTests(unittest.TestCase):
         callback = self._callback()
         with patch.object(plugin, "run_subcommand", return_value=None) as run_subcommand:
             self.assertIsNone(callback(tool_name="read_file", args={"path": "eslint.config.js"}))
-        run_subcommand.assert_called_once()
-        self.assertEqual(run_subcommand.call_args.args[0], "hookify")
+        self.assertEqual([call.args[0] for call in run_subcommand.call_args_list], ["observe", "governance-capture", "hookify"])
     def test_bash_dispatch_runs_preflight_then_hookify_and_blocks(self):
         from unittest.mock import patch
 
@@ -138,11 +122,11 @@ class NativeConfigProtectionTests(unittest.TestCase):
         with patch.object(
             plugin,
             "run_subcommand",
-            side_effect=[None, {"action": "block", "message": "hookify denied"}],
+            side_effect=[None, None, None, {"action": "block", "message": "hookify denied"}],
         ) as run_subcommand:
             result = callback(tool_name="terminal", args={"command": "rm -rf /tmp/x"}, cwd="/project")
         self.assertEqual(result, {"action": "block", "message": "hookify denied"})
-        self.assertEqual([call.args[0] for call in run_subcommand.call_args_list], ["preflight", "hookify"])
+        self.assertEqual([call.args[0] for call in run_subcommand.call_args_list], ["observe", "governance-capture", "preflight", "hookify"])
         self.assertEqual(run_subcommand.call_args_list[0].args[1]["cwd"], "/project")
 
     def test_preflight_action_block_short_circuits_hookify(self):
@@ -150,24 +134,22 @@ class NativeConfigProtectionTests(unittest.TestCase):
 
         callback = self._callback()
         with patch.object(
-            plugin, "run_subcommand", return_value={"action": "block", "message": "no verify"}
+            plugin, "run_subcommand", side_effect=[None, None, {"action": "block", "message": "no verify"}]
         ) as run_subcommand:
             result = callback(tool_name="Bash", args={"command": "git commit --no-verify"})
         self.assertEqual(result, {"action": "block", "message": "no verify"})
-        run_subcommand.assert_called_once()
-        self.assertEqual(run_subcommand.call_args.args[0], "preflight")
+        self.assertEqual([call.args[0] for call in run_subcommand.call_args_list], ["observe", "governance-capture", "preflight"])
 
     def test_file_tool_runs_hookify_before_config_protection(self):
         from unittest.mock import patch
 
         callback = self._callback()
         with patch.object(
-            plugin, "run_subcommand", side_effect=[{"decision": "block", "reason": "rule"}]
+            plugin, "run_subcommand", side_effect=[None, None, {"decision": "block", "reason": "rule"}]
         ) as run_subcommand:
             result = callback(tool_name="write_file", args={"path": "src/a.py"})
         self.assertEqual(result, {"action": "block", "message": "rule"})
-        run_subcommand.assert_called_once()
-        self.assertEqual(run_subcommand.call_args.args[0], "hookify")
+        self.assertEqual([call.args[0] for call in run_subcommand.call_args_list], ["observe", "governance-capture", "hookify"])
 
     def test_powershell_preflight_and_file_hookify_tool_sets(self):
         self.assertIn("pwsh", plugin._PREFLIGHT_TOOLS)

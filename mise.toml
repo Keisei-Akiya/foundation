@@ -21,6 +21,10 @@ run = "mise run rust-test"
 description = "Run Rust tests, lint, and formatting checks"
 run = "mise run rust-test && mise run lint-check && mise run fmt-check"
 
+[tasks.runtime-test]
+description = "Run native plugin tests against an installed Hermes runtime"
+run = "uv run --project \"$HERMES_AGENT_ROOT\" --with pytest --python \"$HERMES_PYTHON\" pytest -q tests/test_native_config_protection.py tests/test_hermes_runtime.py"
+
 [tasks.precommit]
 description = "Auto-format staged Rust files and check the staged snapshot"
 run = "cargo run --quiet --locked --bin precommit --"
