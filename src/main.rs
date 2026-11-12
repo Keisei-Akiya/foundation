@@ -143,6 +143,7 @@ fn valid_id(v: &str, max: usize, extra: &str) -> bool {
 mod config_protection;
 mod decide;
 mod enable;
+mod governance_capture;
 mod hookify;
 mod lifecycle;
 mod post_observer;
@@ -168,6 +169,7 @@ fn main() {
             "post-observer",
             "lifecycle",
             "session-hooks",
+            "governance-capture",
         ]
         .contains(&command.as_str())
     {
@@ -186,6 +188,7 @@ fn main() {
         "post-observer" => post_observer::post_observer(&payload),
         "lifecycle" => lifecycle::lifecycle(&payload),
         "session-hooks" => session_hooks::run(&payload),
+        "governance-capture" => governance_capture::run(&payload),
         _ => unreachable!(),
     }
     let _ = io::stdout().flush();
