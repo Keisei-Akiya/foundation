@@ -36,7 +36,8 @@ curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/instal
 
 - `config.yaml` を `config.yaml.bak-<時刻>` にバックアップしてから、末尾に `hooks:` ブロック（5件）を追記する。
 - `shell-hooks-allowlist.json` に同じ5件の `(event, command)` だけを承認として記録する。`hooks_auto_accept` は設定しない。
-- `config.yaml` に既に `hooks:` セクションがある場合は、自動マージせず何も変更せずに終了する。手動で `hooks.example.yaml` を反映する。
+- `config.yaml` に既に `hooks:` セクションがある場合は、その中へ不足している hook だけを追加する。既存の記述・コメントは変更しない。
+- `hooks:` が `*anchor` やリスト形式などで安全にマージできない場合は、何も変更せずに終了する。その場合は手動で `hooks.example.yaml` を反映する。
 - 何度実行しても結果は同じ（冪等）。gatewayの再起動は不要で、実行中のgatewayは約30秒で反映する。
 - 反映の確認は `hermes hooks doctor` で行う。
 

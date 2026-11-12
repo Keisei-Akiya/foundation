@@ -86,18 +86,26 @@ fn has_hooks_section(config: &str) -> bool {
     })
 }
 
+/// One list entry of `hooks.<event>`, with `-` placed at column `pad`.
+fn entry_lines(h: &HookDef, bin: &str, pad: usize) -> Vec<String> {
+    let sp = " ".repeat(pad);
+    vec![
+        format!("{sp}- command: '{}'", command_for(bin, h.sub)),
+        format!("{sp}  matcher: '{}'", h.matcher),
+        format!("{sp}  timeout: {}", h.timeout),
+        format!("{sp}  fail_closed: {}", h.fail_closed),
+    ]
+}
+
 fn hooks_block(bin: &str) -> String {
     let mut out = String::from("hooks:\n");
     for event in ["pre_tool_call", "post_tool_call"] {
         out.push_str(&format!("  {event}:\n"));
         for h in HOOKS.iter().filter(|h| h.event == event) {
-            out.push_str(&format!(
-                "    - command: '{}'\n      matcher: '{}'\n      timeout: {}\n      fail_closed: {}\n",
-                command_for(bin, h.sub),
-                h.matcher,
-                h.timeout,
-                h.fail_closed
-            ));
+            for l in entry_lines(h, bin, 4) {
+                out.push_str(&l);
+                out.push('\n');
+            }
         }
     }
     out
@@ -107,24 +115,183 @@ fn hooks_block(bin: &str) -> String {
 enum ConfigPlan {
     /// All hook commands are already present; leave the file alone.
     AlreadyEnabled,
-    /// Replace the file with this content.
+    /// Replace the file with this content (no `hooks:` section existed before).
     Write(String),
+    /// Replace the file with this content, which adds the listed hooks (by subcommand)
+    /// to the already existing `hooks:` section.
+    Merge(String, Vec<&'static str>),
+}
+
+const UNMERGEABLE: &str = "Add the entries from hooks.example.yaml by hand.";
+
+fn indent_of(line: &str) -> usize {
+    line.len() - line.trim_start_matches(' ').len()
+}
+
+fn is_blank_or_comment(line: &str) -> bool {
+    let t = line.trim();
+    t.is_empty() || t.starts_with('#')
+}
+
+/// The value written after `key:` on the same line, without a trailing comment.
+fn inline_value(rest: &str) -> &str {
+    let r = rest.trim();
+    if r.starts_with('#') {
+        return "";
+    }
+    r.split(" #").next().unwrap_or("").trim()
+}
+
+fn is_empty_scalar(v: &str) -> bool {
+    matches!(v, "{}" | "[]" | "null" | "~")
+}
+
+/// Exclusive end of the block opened by the key line at `start`: the line after the last
+/// non-blank, non-comment line that is nested under it (or is a `- ` item at the same indent).
+fn block_end(lines: &[String], start: usize, key_indent: usize) -> usize {
+    let mut last = start + 1;
+    for (i, l) in lines.iter().enumerate().skip(start + 1) {
+        if is_blank_or_comment(l) {
+            continue;
+        }
+        let ind = indent_of(l);
+        if ind > key_indent || (ind == key_indent && l.trim_start().starts_with("- ")) {
+            last = i + 1;
+        } else {
+            break;
+        }
+    }
+    last
+}
+
+/// Line index of `<event>:` directly under the `hooks:` key at `h` (children at `child_indent`).
+fn find_event(
+    lines: &[String],
+    h: usize,
+    end: usize,
+    child_indent: usize,
+    event: &str,
+) -> Option<usize> {
+    (h + 1..end).find(|&i| {
+        indent_of(&lines[i]) == child_indent
+            && lines[i]
+                .trim_start()
+                .strip_prefix(event)
+                .is_some_and(|r| r.starts_with(':'))
+    })
+}
+
+/// Add the missing foundation hooks to the existing top-level `hooks:` key at line `h`.
+/// Works on lines so comments and formatting elsewhere stay untouched.
+fn merge_into_hooks(
+    lines: &mut Vec<String>,
+    h: usize,
+    bin: &str,
+    cr: &str,
+) -> Result<Vec<&'static str>, String> {
+    let unsupported = |what: &str| {
+        format!("config.yaml has a `hooks:` section that cannot be merged automatically ({what}). {UNMERGEABLE}")
+    };
+    let mut added: Vec<&'static str> = Vec::new();
+    let value =
+        inline_value(lines[h].trim_end_matches('\r').trim_start_matches("hooks:")).to_string();
+    if is_empty_scalar(&value) && value != "[]" {
+        lines[h] = format!("hooks:{cr}");
+    } else if !value.is_empty() {
+        return Err(unsupported("`hooks:` has an inline value"));
+    }
+
+    for event in ["pre_tool_call", "post_tool_call"] {
+        let end = block_end(lines, h, 0);
+        let child_indent = (h + 1..end)
+            .find(|&i| !is_blank_or_comment(&lines[i]))
+            .map(|i| indent_of(&lines[i]))
+            .unwrap_or(2);
+        if child_indent == 0 {
+            return Err(unsupported("`hooks:` is a list"));
+        }
+        let mut new_lines: Vec<String> = Vec::new();
+        let insert_at = match find_event(lines, h, end, child_indent, event) {
+            Some(k) => {
+                let v = inline_value(
+                    lines[k]
+                        .trim_end_matches('\r')
+                        .trim_start()
+                        .trim_start_matches(event)
+                        .trim_start_matches(':'),
+                )
+                .to_string();
+                if is_empty_scalar(&v) {
+                    lines[k] = format!("{}{event}:{cr}", " ".repeat(child_indent));
+                } else if !v.is_empty() {
+                    return Err(unsupported(&format!("`{event}:` has an inline value")));
+                }
+                let eb = block_end(lines, k, child_indent);
+                let item_indent = (k + 1..eb)
+                    .find(|&i| lines[i].trim_start().starts_with("- "))
+                    .map(|i| indent_of(&lines[i]))
+                    .unwrap_or(child_indent + 2);
+                let present = lines[k + 1..eb]
+                    .iter()
+                    .filter(|l| !is_blank_or_comment(l))
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                for hd in HOOKS.iter().filter(|hd| hd.event == event) {
+                    if !present.contains(&command_for(bin, hd.sub)) {
+                        new_lines.extend(entry_lines(hd, bin, item_indent));
+                        added.push(hd.sub);
+                    }
+                }
+                eb
+            }
+            None => {
+                let item_indent = child_indent + 2;
+                new_lines.push(format!("{}{event}:", " ".repeat(child_indent)));
+                for hd in HOOKS.iter().filter(|hd| hd.event == event) {
+                    new_lines.extend(entry_lines(hd, bin, item_indent));
+                    added.push(hd.sub);
+                }
+                end
+            }
+        };
+        if !new_lines.is_empty() {
+            let tail = lines.split_off(insert_at);
+            lines.extend(new_lines.into_iter().map(|l| format!("{l}{cr}")));
+            lines.extend(tail);
+        }
+    }
+    Ok(added)
 }
 
 fn plan_config(existing: Option<&str>, bin: &str) -> Result<ConfigPlan, String> {
     let text = existing.unwrap_or("");
     if has_hooks_section(text) {
-        let all_present = HOOKS
+        let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+        let keys: Vec<usize> = (0..lines.len())
+            .filter(|&i| has_hooks_section(&lines[i]))
+            .collect();
+        if keys.len() != 1 {
+            return Err(format!(
+                "config.yaml has more than one top-level `hooks:` key. {UNMERGEABLE}"
+            ));
+        }
+        let h = keys[0];
+        let cr = if lines[h].ends_with('\r') { "\r" } else { "" };
+        let added = merge_into_hooks(&mut lines, h, bin, cr)?;
+        let out = lines.join("\n");
+        if !HOOKS
             .iter()
-            .all(|h| text.contains(&command_for(bin, h.sub)));
-        if all_present {
+            .all(|hd| out.contains(&command_for(bin, hd.sub)))
+        {
+            return Err(format!(
+                "could not merge hooks into `hooks:` safely. {UNMERGEABLE}"
+            ));
+        }
+        if added.is_empty() && out == text {
             return Ok(ConfigPlan::AlreadyEnabled);
         }
-        return Err(
-            "config.yaml already has a `hooks:` section; refusing to merge automatically. \
-Add the entries from hooks.example.yaml by hand."
-                .into(),
-        );
+        return Ok(ConfigPlan::Merge(out, added));
     }
     let mut out = text.to_string();
     if !out.is_empty() && !out.ends_with('\n') {
@@ -305,6 +472,11 @@ fn run_inner(args: &[String]) -> Result<(), String> {
                 "config.yaml: would append hooks block:\n{}",
                 hooks_block(&opts.bin)
             ),
+            ConfigPlan::Merge(_, added) => println!(
+                "config.yaml: would add {} hooks to the existing `hooks:` section: {}",
+                added.len(),
+                added.join(", ")
+            ),
         }
         println!(
             "allowlist: would approve {} hooks in {}",
@@ -323,9 +495,13 @@ fn run_inner(args: &[String]) -> Result<(), String> {
         .map_err(|e| format!("open lock: {e}"))?;
     lock.lock().map_err(|e| format!("lock allowlist: {e}"))?;
 
+    let merged: Option<Vec<&'static str>> = match &plan {
+        ConfigPlan::Merge(_, added) => Some(added.clone()),
+        _ => None,
+    };
     match plan {
         ConfigPlan::AlreadyEnabled => println!("config.yaml: hooks already present (no change)"),
-        ConfigPlan::Write(content) => {
+        ConfigPlan::Write(content) | ConfigPlan::Merge(content, _) => {
             if existing.is_some() {
                 let secs = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -337,7 +513,14 @@ fn run_inner(args: &[String]) -> Result<(), String> {
                 println!("config.yaml: backup -> {}", backup.display());
             }
             atomic_write(&config_path, content.as_bytes(), None)?;
-            println!("config.yaml: appended {} hooks", HOOKS.len());
+            match merged {
+                Some(added) => println!(
+                    "config.yaml: added {} hooks to the existing `hooks:` section: {}",
+                    added.len(),
+                    added.join(", ")
+                ),
+                None => println!("config.yaml: appended {} hooks", HOOKS.len()),
+            }
         }
     }
     let mut text = serde_json::to_string_pretty(&new_allow).map_err(|e| e.to_string())?;
@@ -403,10 +586,115 @@ mod tests {
             .all(|h| h.event == "pre_tool_call" || !h.fail_closed));
     }
 
+    fn merged(src: &str) -> (String, Vec<&'static str>) {
+        match plan_config(Some(src), BIN).unwrap() {
+            ConfigPlan::Merge(out, added) => (out, added),
+            other => panic!("expected Merge, got {other:?}"),
+        }
+    }
+
+    fn assert_all_present(out: &str) {
+        for h in HOOKS {
+            assert_eq!(
+                out.matches(&command_for(BIN, h.sub)).count(),
+                1,
+                "{} should appear exactly once",
+                h.sub
+            );
+        }
+    }
+
     #[test]
-    fn refuses_foreign_hooks_section() {
-        let err = plan_config(Some("hooks:\n  on_session_start: []\n"), BIN).unwrap_err();
-        assert!(err.contains("already has"));
+    fn merges_into_foreign_hooks_section() {
+        let src = "model: x\nhooks:\n  on_session_start:\n    - command: 'echo hi'\nother: 1\n";
+        let (out, added) = merged(src);
+        assert_eq!(added.len(), HOOKS.len());
+        assert_all_present(&out);
+        // existing content is untouched and keeps its place
+        assert!(
+            out.starts_with("model: x\nhooks:\n  on_session_start:\n    - command: 'echo hi'\n")
+        );
+        assert!(out.ends_with("other: 1\n"));
+        // hooks section is still exactly one top-level key
+        assert_eq!(out.lines().filter(|l| l.starts_with("hooks:")).count(), 1);
+        // and the result is stable
+        assert_eq!(
+            plan_config(Some(&out), BIN).unwrap(),
+            ConfigPlan::AlreadyEnabled
+        );
+    }
+
+    #[test]
+    fn merges_into_empty_hooks_forms() {
+        for src in [
+            "hooks:\n",
+            "hooks: {}\n",
+            "hooks: null # none\n",
+            "hooks:\n  pre_tool_call: []\n",
+        ] {
+            let (out, added) = merged(src);
+            assert_eq!(added.len(), HOOKS.len(), "{src:?}");
+            assert_all_present(&out);
+            assert_eq!(
+                plan_config(Some(&out), BIN).unwrap(),
+                ConfigPlan::AlreadyEnabled,
+                "{src:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn appends_to_existing_event_list_with_own_indent() {
+        let src = "hooks:\n    pre_tool_call:\n        - command: 'guard'\n          matcher: 'x'\n    post_tool_call:\n        - command: 'log'\n";
+        let (out, _) = merged(src);
+        assert_all_present(&out);
+        assert!(out.contains(
+            "        - command: 'guard'\n          matcher: 'x'\n        - command: '\""
+        ));
+        assert!(
+            out.contains("    post_tool_call:\n        - command: 'log'\n        - command: '\"")
+        );
+    }
+
+    #[test]
+    fn adds_only_missing_hooks() {
+        let (full, _) = merged("hooks: {}\n");
+        let first = HOOKS.iter().find(|h| h.event == "pre_tool_call").unwrap();
+        let cmd = command_for(BIN, first.sub);
+        // drop one hook's four lines
+        let mut lines: Vec<&str> = full.lines().collect();
+        let i = lines.iter().position(|l| l.contains(&cmd)).unwrap();
+        lines.drain(i..i + 4);
+        let partial = lines.join("\n") + "\n";
+        let (out, added) = merged(&partial);
+        assert_eq!(added, vec![first.sub]);
+        assert_all_present(&out);
+    }
+
+    #[test]
+    fn keeps_comments_and_crlf() {
+        let src = "# top\r\nhooks:  # mine\r\n  # note\r\n  on_session_start: []\r\nx: 1\r\n";
+        let (out, _) = merged(src);
+        assert!(
+            out.starts_with("# top\r\nhooks:  # mine\r\n  # note\r\n  on_session_start: []\r\n")
+        );
+        assert!(out.ends_with("x: 1\r\n"));
+        assert!(!out.contains("\n\n") && out.matches('\n').count() == out.matches("\r\n").count());
+        assert_all_present(&out);
+    }
+
+    #[test]
+    fn refuses_unmergeable_hooks_sections() {
+        for src in [
+            "hooks: *anchor\n",
+            "hooks: [a]\n",
+            "hooks:\n- a\n",
+            "hooks:\n  pre_tool_call: *x\n",
+            "hooks:\n  a: 1\nhooks:\n  b: 2\n",
+        ] {
+            let err = plan_config(Some(src), BIN).unwrap_err();
+            assert!(err.contains("by hand"), "{src:?}: {err}");
+        }
     }
 
     #[test]

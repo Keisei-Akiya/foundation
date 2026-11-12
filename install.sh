@@ -24,8 +24,9 @@ Usage: install.sh [--version X.Y.Z] [--hermes-home DIR] [--enable-hooks]
 Installs foundation (foundation binary, adapters, skills, docs).
 
   --version X.Y.Z    Release to install (default: latest).
-  --enable-hooks     Also enable all hooks: back up config.yaml, append a hooks
-                     block, and approve those hooks in the allowlist (opt-in).
+  --enable-hooks     Also enable all hooks: back up config.yaml, add the hooks
+                     (merged into an existing hooks section if any), and approve
+                     those hooks in the allowlist (opt-in).
   --hermes-home DIR  Target Hermes home (default: \$HERMES_HOME or ~/.hermes).
 
 Installed paths:
