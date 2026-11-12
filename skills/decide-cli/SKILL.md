@@ -17,9 +17,7 @@ foundation decide [--provider typesafe] [--spec <file|->] [--model <name>] [--dr
 - `--spec` は省略または `-` で標準入力から読む。上限は4 MiB。
 - `--model` は省略時に `jev-latest` を使う。指定する場合も `jev-latest` のみ受け付ける。
 - `--dry-run` は送信せず、送信先 URL とリクエスト本文を表示する。URL の許可規則は dry-run にも適用する。
-- `TYPESAFE_BASE_URL` は既定の `https://api.typesafe.ai` またはテスト用ループバック URL のみ許可する。認証情報、パス、クエリ、フラグメントを含めてはならない。
 - HTTP リダイレクトは追跡しない。
-- 認証には `TYPESAFE_API_KEY` を使う。CLI はプロセス環境変数から読み、未設定の場合は `$HERMES_HOME/.env`（未設定時は `~/.hermes/.env`）から自動で補う。キー値を表示しない。
 - 終了コードは、成功が 0、引数・spec・環境変数の誤りが 2、通信や HTTP エラーが 1 である。
 
 ## spec
