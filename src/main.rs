@@ -150,6 +150,8 @@ mod observe;
 mod post_observer;
 mod preflight;
 mod session_hooks;
+#[allow(dead_code)] // Public API for forthcoming stateful hooks; current hooks retain legacy paths.
+mod state;
 
 fn main() {
     let all: Vec<String> = std::env::args().skip(1).collect();
