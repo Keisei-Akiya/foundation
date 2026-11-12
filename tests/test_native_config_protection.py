@@ -175,6 +175,35 @@ class NativeConfigProtectionTests(unittest.TestCase):
         self.assertIn("Edit", plugin._HOOKIFY_TOOLS)
         self.assertIn("MultiEdit", plugin._HOOKIFY_TOOLS)
 
+    def test_registers_post_tool_observer_and_skill_lifecycle(self):
+        context = HookContext()
+        plugin.register(context)
+        self.assertIn("post_tool_call", context.hooks)
+
+    def test_post_tool_dispatch_passes_hermes_result_and_status(self):
+        from unittest.mock import patch
+
+        context = HookContext()
+        plugin.register(context)
+        with patch.object(plugin, "run_subcommand", return_value=None) as run_subcommand:
+            context.hooks["post_tool_call"](
+                tool_name="skill",
+                args={"skill": "demo"},
+                result={"error": "failed"},
+                status="error",
+                error_type="tool_error",
+                error_message="failed",
+                cwd="/project",
+                session_id="session-1",
+            )
+        self.assertEqual([call.args[0] for call in run_subcommand.call_args_list], ["post-observer", "lifecycle"])
+        payload = run_subcommand.call_args_list[0].args[1]
+        self.assertEqual(payload["result"], {"error": "failed"})
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["error_type"], "tool_error")
+        self.assertEqual(payload["error_message"], "failed")
+        self.assertEqual(payload["session_id"], "session-1")
+
 
 class NativePluginMigrationTests(unittest.TestCase):
     def test_shell_hook_enablement_does_not_register_config_protection(self):

@@ -6,6 +6,8 @@ been removed; the behavior is now implemented in the Rust `foundation` binary:
 
 - config-protection — derived from ECC's Hermes config-protection hook (ECC hook #7). Implemented by the `config-protection` subcommand.
 - check-console-log — derived from ECC's Hermes check-console-log hook (ECC hook #22). Implemented as the console-log check in the `post-observer` subcommand.
+- post:dispatcher:sync — partial native migration. Hermes `post_tool_call` dispatches to Rust `post-observer` and `lifecycle`; no arbitrary ECC child-hook registry or per-child controls are implemented.
+- post:skill:track — partial native migration. Rust `lifecycle` persists minimal Skill invocation metadata and success/failure outcome when `ECC_HERMES_SKILL_TRACK=1`.
 
 Copyright (c) 2026 Affaan Mustafa. The derived upstream hooks are covered by the MIT License.
 The upstream `LICENSE` is at the ECC repository root. The required copyright and
@@ -46,4 +48,4 @@ warnings to stderr, and never blocks. It also reports literal black/white colors
 and generic font families. It is not a `pre_verify` hook and does not consume
 `changed_paths`; wiring it only to `pre_verify` would not make it fire.
 
-Registration is opt-in through `hooks.example.yaml`. No entry is installed automatically.
+The native plugin registers `post_tool_call` and forwards Hermes result/status fields. Runtime dispatch in a live Hermes gateway has not been tested. The lifecycle recorder remains opt-in through `ECC_HERMES_SKILL_TRACK=1` and requires `HERMES_HOME`.

@@ -1,10 +1,11 @@
 name: foundation
 version: "0.0.7"
-description: Native pre-tool checks for preflight, hookify, and config protection
+description: Native pre-tool checks and post-tool observers
 author: Keisei-Akiya
 kind: standalone
 provides_hooks:
   - pre_tool_call
+  - post_tool_call
 external_dependencies:
   - name: foundation
     check: "foundation --help"

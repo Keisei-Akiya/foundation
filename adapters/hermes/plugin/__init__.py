@@ -107,13 +107,21 @@ def run_subcommand(
 
 def _payload(event: str, kwargs: dict[str, Any]) -> dict[str, Any]:
     args = kwargs.get("args")
-    return {
+    payload = {
         "hook_event_name": event,
         "tool_name": kwargs.get("tool_name"),
         "tool_input": args if isinstance(args, dict) else None,
         "session_id": kwargs.get("session_id") or "",
         "cwd": kwargs.get("cwd") or os.getcwd(),
     }
+    for field in (
+        "result", "tool_call_id", "task_id", "turn_id", "api_request_id",
+        "conversation_id", "duration_ms", "status", "error_type", "error_message",
+        "middleware_trace",
+    ):
+        if field in kwargs:
+            payload[field] = kwargs[field]
+    return payload
 
 
 def on_pre_tool_call(**kwargs: Any) -> Optional[dict[str, Any]]:
@@ -147,5 +155,13 @@ def on_pre_tool_call(**kwargs: Any) -> Optional[dict[str, Any]]:
     return None
 
 
+def on_post_tool_call(**kwargs: Any) -> None:
+    """Dispatch Hermes post-tool events to independent best-effort observers."""
+    payload = _payload("post_tool_call", kwargs)
+    run_subcommand("post-observer", payload)
+    run_subcommand("lifecycle", payload)
+
+
 def register(ctx: Any) -> None:
     ctx.register_hook("pre_tool_call", on_pre_tool_call)
+    ctx.register_hook("post_tool_call", on_post_tool_call)
