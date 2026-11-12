@@ -69,7 +69,7 @@ pub fn run(payload: &Value) {
         .and_then(Value::as_str)
     {
         if sensitive_path(path) {
-            events.push(json!({"eventType":"policy_violation","payload":{"toolName":tool,"hookPhase":phase,"filePath":path.chars().take(200).collect::<String>(),"reason":"sensitive_file_access","severity":"warning"}}));
+            events.push(json!({"eventType":"policy_violation","payload":{"toolName":tool,"hookPhase":phase,"reason":"sensitive_file_access","severity":"warning"}}));
         }
     }
     let normalized = tool.to_ascii_lowercase();
