@@ -36,8 +36,13 @@ jobs:
       - name: Test
         if: steps.check.outputs.release == 'true'
         run: cargo test --locked
+      - name: Install musl compiler
+        if: steps.check.outputs.release == 'true'
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
       - name: Build
         if: steps.check.outputs.release == 'true'
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
         run: |
           rustup target add "$TARGET"
           cargo build --release --locked --target "$TARGET" --bin foundation

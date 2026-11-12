@@ -29,3 +29,11 @@ jobs:
           sh -n install.sh
           bash -n scripts/package-release.sh
           bash -n scripts/check-version-bump.sh
+      - name: Install musl compiler
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+      - name: Build musl target
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          cargo build --locked --target x86_64-unknown-linux-musl --bin foundation
