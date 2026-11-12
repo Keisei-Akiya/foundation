@@ -126,6 +126,7 @@ def _payload(event: str, kwargs: dict[str, Any]) -> dict[str, Any]:
 
 def on_pre_tool_call(**kwargs: Any) -> Optional[dict[str, Any]]:
     """Dispatch migrated guards and the opt-in governance event observer."""
+    run_subcommand("observe", _payload("pre_tool_call", kwargs))
     run_subcommand("governance-capture", _payload("pre_tool_call", kwargs))
     tool_name = kwargs.get("tool_name")
     if tool_name in _PREFLIGHT_TOOLS:

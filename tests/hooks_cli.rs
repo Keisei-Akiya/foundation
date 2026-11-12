@@ -160,6 +160,27 @@ fn lifecycle_records_hermes_success_status() {
 }
 
 #[test]
+fn observe_is_opt_in_and_persists_no_tool_arguments_or_session_id() {
+    let home = std::env::temp_dir().join(format!("foundation-observe-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    let payload = r#"{"tool_name":"terminal","tool_input":{"command":"secret command"},"session_id":"private-session"}"#;
+    let (code, _, _) = invoke_with_env(&["observe"], payload, &home);
+    assert_eq!(code, 0);
+    let path = home.join("plugin-data/ecc-hooks/continuous-learning-observations.jsonl");
+    assert!(!path.exists());
+    let config = home.join("continuous-learning-v2/config.json");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    std::fs::write(&config, r#"{"observer":{"enabled":true}}"#).unwrap();
+    let (code, _, _) = invoke_with_env(&["observe"], payload, &home);
+    assert_eq!(code, 0);
+    let record = std::fs::read_to_string(path).unwrap();
+    assert!(record.contains("\"tool_name\":\"terminal\""));
+    assert!(!record.contains("secret command"));
+    assert!(!record.contains("private-session"));
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
 fn session_finalize_writes_private_marker_with_boundary_metadata() {
     let home = std::env::temp_dir().join(format!("foundation-marker-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);

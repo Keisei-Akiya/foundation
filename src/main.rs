@@ -146,6 +146,7 @@ mod enable;
 mod governance_capture;
 mod hookify;
 mod lifecycle;
+mod observe;
 mod post_observer;
 mod preflight;
 mod session_hooks;
@@ -170,6 +171,7 @@ fn main() {
             "lifecycle",
             "session-hooks",
             "governance-capture",
+            "observe",
         ]
         .contains(&command.as_str())
     {
@@ -189,6 +191,7 @@ fn main() {
         "lifecycle" => lifecycle::lifecycle(&payload),
         "session-hooks" => session_hooks::run(&payload),
         "governance-capture" => governance_capture::run(&payload),
+        "observe" => observe::run(&payload),
         _ => unreachable!(),
     }
     let _ = io::stdout().flush();
