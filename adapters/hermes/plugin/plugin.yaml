@@ -1,0 +1,11 @@
+name: foundation
+version: "0.1.0"
+description: ECC hook ports for Hermes, backed by the foundation Rust binary
+author: Keisei-Akiya
+kind: standalone
+provides_hooks:
+  - pre_tool_call
+external_dependencies:
+  - name: foundation
+    check: "foundation --help"
+    install: "see install.sh in the foundation repository"

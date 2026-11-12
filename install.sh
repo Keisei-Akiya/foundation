@@ -115,11 +115,25 @@ rm -rf "$share_dir.old"
 mv "$share_dir.new" "$share_dir"
 rm -rf "$share_dir.old"
 
+# Place the native plugin where Hermes discovers it. This only adds a symlink;
+# Hermes loads the plugin after `plugins.enabled` lists it, which install.sh
+# never edits. A foreign plugins/foundation is left untouched.
+plugin_link="$hermes_home/plugins/foundation"
+plugin_target="../foundation/adapters/hermes/plugin"
+plugin_note="plugin : $plugin_link"
+if [ -L "$plugin_link" ] || [ ! -e "$plugin_link" ]; then
+  mkdir -p "$hermes_home/plugins"
+  ln -sfn "$plugin_target" "$plugin_link"
+else
+  plugin_note="plugin : skipped ($plugin_link already exists and is not a symlink)"
+fi
+
 cat <<EOF
 
 Installed foundation $installed_version
   binary: $bin_dir/foundation
   files : $share_dir
+  $plugin_note
 
 EOF
 
