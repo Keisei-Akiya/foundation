@@ -1,12 +1,5 @@
 fn dotenv_values() -> std::collections::HashMap<String, String> {
-    const ALLOWED: &[&str] = &[
-        "OPENAI_API_KEY",
-        "OPENAI_BASE_URL",
-        "AZURE_ENDPOINT",
-        "AZURE_API_KEY",
-        "AZURE_ENTRA_TOKEN",
-        "DEPLOYMENT_NAME",
-    ];
+    const ALLOWED: &[&str] = &["TYPESAFE_API_KEY", "TYPESAFE_BASE_URL"];
     let home = env_without_dotenv("HERMES_HOME")
         .map(std::path::PathBuf::from)
         .or_else(|| {

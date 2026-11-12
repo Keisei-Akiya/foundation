@@ -1,11 +1,5 @@
-//! `foundation decide`: System One 型の decision モデルを呼ぶ。
-//!
-//! 共通の質問仕様 (spec) を受け取り、プロバイダごとのリクエストに変換して送る。
-//! - openai: `POST {OPENAI_BASE_URL|https://api.openai.com}/v1/decisions`
-//! - microsoft: `POST {AZURE_ENDPOINT}/providers/microsoft/v1/systemone`
-//!
+//! `foundation decide`: TypeSafe System One の Jev モデルを呼ぶ。
 //! 認証情報は環境変数からのみ読み、標準出力・標準エラーには出さない。
-//! 応答はプロバイダの JSON をそのまま標準出力へ書く。
 
 mod args;
 mod env;
@@ -14,11 +8,9 @@ mod request;
 mod spec;
 mod target;
 
-pub use args::Provider;
-pub use request::{build_microsoft, build_openai};
-
 use args::{parse_args, USAGE};
 use http::send;
+
 use serde_json::{json, Value};
 use spec::read_spec;
 use target::target;
@@ -46,8 +38,11 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
     if opts.dry_run {
-        let out = json!({"method": "POST", "url": t.url, "body": t.body});
-        println!("{}", serde_json::to_string_pretty(&out).unwrap());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({"method":"POST", "url":t.url, "body":t.body}))
+                .unwrap()
+        );
         return 0;
     }
     match send(&t, opts.timeout) {

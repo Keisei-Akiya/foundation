@@ -1,9 +1,8 @@
-pub(super) const USAGE: &str = "usage: foundation decide --provider <openai|microsoft> [--spec <file|->] [--model <name>] [--dry-run] [--timeout <secs>]";
+pub(super) const USAGE: &str = "usage: foundation decide [--provider typesafe] [--spec <file|->] [--model <name>] [--dry-run] [--timeout <secs>]";
 
 #[derive(Debug, PartialEq)]
 pub enum Provider {
-    OpenAi,
-    Microsoft,
+    TypeSafe,
 }
 
 pub(super) struct Options {
@@ -15,7 +14,7 @@ pub(super) struct Options {
 }
 
 pub(super) fn parse_args(args: &[String]) -> Result<Options, String> {
-    let mut provider = None;
+    let provider = Provider::TypeSafe;
     let mut spec = "-".to_string();
     let mut model = None;
     let mut dry_run = false;
@@ -29,14 +28,19 @@ pub(super) fn parse_args(args: &[String]) -> Result<Options, String> {
         };
         match arg.as_str() {
             "--provider" => {
-                provider = Some(match value("--provider")?.as_str() {
-                    "openai" => Provider::OpenAi,
-                    "microsoft" => Provider::Microsoft,
-                    other => return Err(format!("unknown provider: {other}")),
-                })
+                let value = value("--provider")?;
+                if value != "typesafe" {
+                    return Err(format!("unknown provider: {value}"));
+                }
             }
             "--spec" => spec = value("--spec")?,
-            "--model" => model = Some(value("--model")?),
+            "--model" => {
+                let value = value("--model")?;
+                if value != "jev-latest" {
+                    return Err("--model supports only jev-latest".into());
+                }
+                model = Some(value);
+            }
             "--timeout" => {
                 timeout = value("--timeout")?
                     .parse::<u64>()
@@ -49,7 +53,7 @@ pub(super) fn parse_args(args: &[String]) -> Result<Options, String> {
         }
     }
     Ok(Options {
-        provider: provider.ok_or("--provider is required")?,
+        provider,
         spec,
         model,
         dry_run,
