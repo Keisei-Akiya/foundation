@@ -7,11 +7,13 @@ return value Hermes expects. The binary stays the single source of hook logic.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import os
 import shutil
 import subprocess
+import types
 from pathlib import Path
 from typing import Any, Optional
 
@@ -188,8 +190,44 @@ def on_session_finalize(**kwargs: Any) -> None:
     run_subcommand("session-hooks", payload)
 
 
+def _core() -> types.SimpleNamespace:
+    """Helpers handed to hooks_ext modules. Wrappers resolve the globals at call time."""
+    return types.SimpleNamespace(
+        run_subcommand=lambda *a, **k: run_subcommand(*a, **k),
+        payload=lambda *a, **k: _payload(*a, **k),
+        hermes_home=lambda: _hermes_home(),
+        HookFailure=HookFailure,
+        logger=logger,
+    )
+
+
+def _load_extensions(ctx: Any) -> None:
+    """Load each hooks_ext/<name>.py and call its register(ctx, core).
+
+    One file per hook keeps parallel changes from colliding. A broken extension
+    is logged and skipped so it cannot disable the other hooks.
+    """
+    ext_dir = Path(__file__).resolve().parent / "hooks_ext"
+    if not ext_dir.is_dir():
+        return
+    core = _core()
+    for path in sorted(ext_dir.glob("*.py")):
+        if path.name.startswith("_"):
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location(f"foundation_ext_{path.stem}", path)
+            if spec is None or spec.loader is None:
+                continue
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.register(ctx, core)
+        except Exception as error:  # noqa: BLE001 - isolate each extension
+            logger.warning("foundation: extension %s failed to load: %s", path.name, error)
+
+
 def register(ctx: Any) -> None:
     ctx.register_hook("pre_tool_call", on_pre_tool_call)
     ctx.register_hook("post_tool_call", on_post_tool_call)
     ctx.register_hook("on_session_start", on_session_start)
     ctx.register_hook("on_session_finalize", on_session_finalize)
+    _load_extensions(ctx)

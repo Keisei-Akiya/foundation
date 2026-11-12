@@ -140,18 +140,31 @@ fn valid_id(v: &str, max: usize, extra: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || "._".contains(c) || extra.contains(c))
 }
 
+mod check_console_log;
 mod config_protection;
+mod cost_tracker;
 mod decide;
+mod desktop_notify;
+mod doc_warning;
 mod enable;
+mod evaluate_session;
+mod format_typecheck;
+mod gateguard;
 mod governance_capture;
 mod hookify;
 mod lifecycle;
+mod mcp_health;
 mod observe;
+mod post_async;
 mod post_observer;
 mod preflight;
+mod prompt_submit;
+mod session_end;
 mod session_hooks;
 #[allow(dead_code)] // Public API for forthcoming stateful hooks; current hooks retain legacy paths.
 mod state;
+mod stop_hookify;
+mod suggest_compact;
 
 fn main() {
     let all: Vec<String> = std::env::args().skip(1).collect();
@@ -174,6 +187,19 @@ fn main() {
             "session-hooks",
             "governance-capture",
             "observe",
+            "prompt-submit",
+            "doc-warning",
+            "suggest-compact",
+            "stop-hookify",
+            "check-console-log",
+            "format-typecheck",
+            "session-end",
+            "evaluate-session",
+            "cost-tracker",
+            "desktop-notify",
+            "mcp-health",
+            "gateguard",
+            "post-async",
         ]
         .contains(&command.as_str())
     {
@@ -194,6 +220,19 @@ fn main() {
         "session-hooks" => session_hooks::run(&payload),
         "governance-capture" => governance_capture::run(&payload),
         "observe" => observe::run(&payload),
+        "prompt-submit" => prompt_submit::run(&payload),
+        "doc-warning" => doc_warning::run(&payload),
+        "suggest-compact" => suggest_compact::run(&payload),
+        "stop-hookify" => stop_hookify::run(&payload),
+        "check-console-log" => check_console_log::run(&payload),
+        "format-typecheck" => format_typecheck::run(&payload),
+        "session-end" => session_end::run(&payload),
+        "evaluate-session" => evaluate_session::run(&payload),
+        "cost-tracker" => cost_tracker::run(&payload),
+        "desktop-notify" => desktop_notify::run(&payload),
+        "mcp-health" => mcp_health::run(&payload),
+        "gateguard" => gateguard::run(&payload),
+        "post-async" => post_async::run(&payload),
         _ => unreachable!(),
     }
     let _ = io::stdout().flush();
