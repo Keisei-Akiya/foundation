@@ -179,6 +179,21 @@ class NativeConfigProtectionTests(unittest.TestCase):
         context = HookContext()
         plugin.register(context)
         self.assertIn("post_tool_call", context.hooks)
+        self.assertIn("on_session_start", context.hooks)
+        self.assertIn("on_session_finalize", context.hooks)
+
+    def test_session_hooks_forward_native_lifecycle_payloads(self):
+        from unittest.mock import patch
+
+        with patch.object(plugin, "run_subcommand") as run_subcommand:
+            plugin.on_session_start(session_id="s-1", cwd="/project", platform="cli")
+            plugin.on_session_finalize(session_id="s-1", reason="session_boundary")
+        self.assertEqual([call.args[0] for call in run_subcommand.call_args_list], ["session-hooks", "session-hooks"])
+        start, finalize = [call.args[1] for call in run_subcommand.call_args_list]
+        self.assertEqual(start["hook_event_name"], "on_session_start")
+        self.assertEqual(start["cwd"], "/project")
+        self.assertEqual(finalize["hook_event_name"], "on_session_finalize")
+        self.assertEqual(finalize["reason"], "session_boundary")
 
     def test_post_tool_dispatch_passes_hermes_result_and_status(self):
         from unittest.mock import patch

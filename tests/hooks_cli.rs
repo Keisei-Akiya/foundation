@@ -158,3 +158,56 @@ fn lifecycle_records_hermes_success_status() {
     assert_eq!(record["outcome"], "success");
     let _ = std::fs::remove_dir_all(&home);
 }
+
+#[test]
+fn session_finalize_writes_private_marker_with_boundary_metadata() {
+    let home = std::env::temp_dir().join(format!("foundation-marker-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    let payload = serde_json::json!({
+        "hook_event_name": "on_session_finalize",
+        "session_id": "session-123",
+        "platform": "cli",
+        "reason": "exit"
+    })
+    .to_string();
+    let (code, stdout, stderr) = invoke_with_env(&["session-hooks"], &payload, &home);
+    assert_eq!(code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+    let marker = home.join("plugin-data/ecc-hooks/session-markers.jsonl");
+    let record: Value =
+        serde_json::from_str(std::fs::read_to_string(&marker).unwrap().trim()).unwrap();
+    assert_eq!(record["event"], "session:end:marker");
+    assert_eq!(record["session_id"], "session-123");
+    assert_eq!(record["platform"], "cli");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(marker).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn session_start_detects_project_lockfile_without_emitting_hook_output() {
+    let root =
+        std::env::temp_dir().join(format!("foundation-session-start-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'\n").unwrap();
+    let payload = serde_json::json!({
+        "hook_event_name": "on_session_start",
+        "cwd": root,
+        "session_id": "session-456"
+    })
+    .to_string();
+    let (code, stdout, stderr) = invoke(&["session-hooks"], &payload);
+    assert_eq!(code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("\"manager\":\"pnpm\""));
+    assert!(stderr.contains("\"lockfile\":\"pnpm-lock.yaml\""));
+    let _ = std::fs::remove_dir_all(&root);
+}

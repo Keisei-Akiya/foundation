@@ -162,6 +162,32 @@ def on_post_tool_call(**kwargs: Any) -> None:
     run_subcommand("lifecycle", payload)
 
 
+def on_session_start(**kwargs: Any) -> None:
+    """Detect project package-manager lockfiles at Hermes session startup."""
+    payload = {
+        "hook_event_name": "on_session_start",
+        "session_id": kwargs.get("session_id") or "",
+        "cwd": kwargs.get("cwd") or os.getcwd(),
+        "platform": kwargs.get("platform") or "",
+        "reason": kwargs.get("reason") or "",
+    }
+    run_subcommand("session-hooks", payload)
+
+
+def on_session_finalize(**kwargs: Any) -> None:
+    """Persist a final-session marker, not a per-turn on_session_end event."""
+    payload = {
+        "hook_event_name": "on_session_finalize",
+        "session_id": kwargs.get("session_id") or "",
+        "cwd": kwargs.get("cwd") or os.getcwd(),
+        "platform": kwargs.get("platform") or "",
+        "reason": kwargs.get("reason") or "",
+    }
+    run_subcommand("session-hooks", payload)
+
+
 def register(ctx: Any) -> None:
     ctx.register_hook("pre_tool_call", on_pre_tool_call)
     ctx.register_hook("post_tool_call", on_post_tool_call)
+    ctx.register_hook("on_session_start", on_session_start)
+    ctx.register_hook("on_session_finalize", on_session_finalize)

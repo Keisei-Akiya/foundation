@@ -147,6 +147,7 @@ mod hookify;
 mod lifecycle;
 mod post_observer;
 mod preflight;
+mod session_hooks;
 
 fn main() {
     let all: Vec<String> = std::env::args().skip(1).collect();
@@ -166,6 +167,7 @@ fn main() {
             "hookify",
             "post-observer",
             "lifecycle",
+            "session-hooks",
         ]
         .contains(&command.as_str())
     {
@@ -183,6 +185,7 @@ fn main() {
         "hookify" => hookify::hookify(&payload),
         "post-observer" => post_observer::post_observer(&payload),
         "lifecycle" => lifecycle::lifecycle(&payload),
+        "session-hooks" => session_hooks::run(&payload),
         _ => unreachable!(),
     }
     let _ = io::stdout().flush();
