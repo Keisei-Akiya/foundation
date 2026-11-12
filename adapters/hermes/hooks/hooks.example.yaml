@@ -3,32 +3,8 @@
 # keep the executable path quoted as one argument, then put the Rust subcommand next.
 # Build first: cargo build --release
 
-# Stateless pre-tool blocking preflight. Emits {"action":"block","message":...}.
-# Only verified literal patterns are blocked; no state, audit, or advisory channel.
-# hooks:
-#   pre_tool_call:
-#     - command: "/FOUNDATION_ROOT/target/release/foundation" preflight
-#       matcher: "^(terminal|bash|Bash|powershell|PowerShell|powershell_tool|pwsh)$"
-#       timeout: 5
-#       fail_closed: false
-
-# Hookify evaluator for .claude/hookify.*.local.md; emits {"decision":"block","reason":...}.
-# Supports bash and file event rules using the actual cwd/tool_input payload.
-# hooks:
-#   pre_tool_call:
-#     - command: "/FOUNDATION_ROOT/target/release/foundation" hookify
-#       matcher: "^(terminal|bash|Bash|read_file|write_file|patch|edit_file|apply_patch)$"
-#       timeout: 5
-#       fail_closed: false
-
-# Existing protected config edits only; new files remain allowed.
-# fail_closed: true で hook 自体の異常時も編集を止める（matcher が編集系ツールのみのため復旧は terminal でできる）。
-# hooks:
-#   pre_tool_call:
-#     - command: "/FOUNDATION_ROOT/target/release/foundation" config-protection
-#       matcher: "^(write_file|edit_file|patch|apply_patch)$"
-#       timeout: 10
-#       fail_closed: true
+# The native plugin registers preflight, hookify, and config-protection for pre_tool_call.
+# Do not also enable shell-hook entries for those subcommands.
 
 # Read-only post-edit observer combines console-log and related source signals.
 # It writes warnings to stderr (not guaranteed user-visible), never blocks.

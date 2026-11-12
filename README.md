@@ -21,10 +21,11 @@ curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/instal
 - `<HERMES_HOME>/bin/foundation`
 - `<HERMES_HOME>/foundation/`（adapters、skills、docs、VERSION）
 
-既定ではインストーラーは `config.yaml`、hook許可設定、起動中のgatewayを変更しない。
-hookを選んで有効にするには `<HERMES_HOME>/foundation/adapters/hermes/hooks/INSTALL.md` を確認し、`hooks.example.yaml` から必要なentryだけを明示的に選択する。
+インストーラーはネイティブpluginを既定で有効にする。
+`config.yaml`、hook許可設定、起動中のgatewayは変更しない。
+shell hooksも有効にする場合だけ `--enable-hooks` を指定する。
 
-全hookを自動で有効にする場合は `--enable-hooks` を付ける（任意）。
+残るshell hooksを自動で有効にする場合は `--enable-hooks` を付ける（任意）。
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --enable-hooks
@@ -34,8 +35,8 @@ curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/instal
 `--dry-run` を付けると変更内容の表示のみで書き込まない。
 `enable` は次の動作をする。
 
-- `config.yaml` を `config.yaml.bak-<時刻>` にバックアップしてから、末尾に `hooks:` ブロック（5件）を追記する。
-- `shell-hooks-allowlist.json` に同じ5件の `(event, command)` だけを承認として記録する。`hooks_auto_accept` は設定しない。
+- `config.yaml` を `config.yaml.bak-<時刻>` にバックアップしてから、末尾に `hooks:` ブロック（4件）を追記する。
+- `shell-hooks-allowlist.json` に同じ4件の `(event, command)` だけを承認として記録する。`hooks_auto_accept` は設定しない。
 - `config.yaml` に既に `hooks:` セクションがある場合は、その中へ不足している hook だけを追加する。既存の記述・コメントは変更しない。
 - `hooks:` が `*anchor` やリスト形式などで安全にマージできない場合は、何も変更せずに終了する。その場合は手動で `hooks.example.yaml` を反映する。
 - 何度実行しても結果は同じ（冪等）。gatewayの再起動は不要で、実行中のgatewayは約30秒で反映する。
@@ -66,7 +67,7 @@ mise run test
 mise run check
 ```
 
-`mise run check`はRustテスト、Clippy、format checkを作業ツリーに対して非変更で実行する。Hermes hookは `adapters/hermes/hooks/hooks.example.yaml` を確認し、必要なentryのみ明示的に選択する。実Hermes接続は未検証。
+`mise run check`はRustテスト、Clippy、format checkを作業ツリーに対して非変更で実行する。残るHermes shell hooksは `adapters/hermes/hooks/hooks.example.yaml` を確認し、必要なentryのみ明示的に選択する。
 
 `mise run precommit`はヘルパーを作業ツリーからビルドして起動する。
 そのため、ヘルパー自身の未コミット変更はそのhookでは検証されていない。

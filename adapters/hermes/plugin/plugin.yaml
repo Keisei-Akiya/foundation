@@ -1,6 +1,6 @@
 name: foundation
-version: "0.1.0"
-description: ECC hook ports for Hermes, backed by the foundation Rust binary
+version: "0.0.7"
+description: Native pre-tool checks for preflight, hookify, and config protection
 author: Keisei-Akiya
 kind: standalone
 provides_hooks:
