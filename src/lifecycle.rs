@@ -12,7 +12,10 @@ pub fn lifecycle(payload: &Value) {
         return;
     };
     if p.get("hook_event_name").and_then(Value::as_str) != Some("post_tool_call")
-        || p.get("tool_name").and_then(Value::as_str) != Some("skill")
+        || !p
+            .get("tool_name")
+            .and_then(Value::as_str)
+            .is_some_and(|name| name.eq_ignore_ascii_case("skill"))
     {
         return;
     }
@@ -36,14 +39,22 @@ pub fn lifecycle(payload: &Value) {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_ascii_lowercase();
-    let outcome =
-        if ["error", "failed", "failure", "timeout", "timed_out"].contains(&status.as_str()) {
-            "failure"
-        } else if ["ok", "success", "succeeded", "completed"].contains(&status.as_str()) {
-            "success"
-        } else {
-            "unknown"
-        };
+    let response_failed = p.get("result").is_some_and(|result| {
+        result
+            .get("error")
+            .is_some_and(|error| !error.is_null() && error != "")
+    }) || p
+        .get("error_message")
+        .is_some_and(|error| !error.is_null() && error != "");
+    let outcome = if response_failed
+        || ["error", "failed", "failure", "timeout", "timed_out"].contains(&status.as_str())
+    {
+        "failure"
+    } else if ["ok", "success", "succeeded", "completed"].contains(&status.as_str()) {
+        "success"
+    } else {
+        "unknown"
+    };
     let Ok(home) = std::env::var("HERMES_HOME") else {
         return;
     };
@@ -56,7 +67,12 @@ pub fn lifecycle(payload: &Value) {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
     }
-    let record = json!({"skill_id":id,"skill_version":version,"outcome":outcome});
+    let record = json!({
+        "skill_id": id,
+        "skill_version": version,
+        "task_description": format!("Skill invocation: {id}"),
+        "outcome": outcome
+    });
     let mut opts = std::fs::OpenOptions::new();
     opts.create(true).append(true);
     #[cfg(unix)]

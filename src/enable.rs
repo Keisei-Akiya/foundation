@@ -35,13 +35,6 @@ const HOOKS: &[HookDef] = &[
         fail_closed: false,
     },
     HookDef {
-        event: "pre_tool_call",
-        sub: "config-protection",
-        matcher: "^(write_file|edit_file|patch|apply_patch)$",
-        timeout: 10,
-        fail_closed: true,
-    },
-    HookDef {
         event: "post_tool_call",
         sub: "post-observer",
         matcher: "^(write_file|edit_file|patch|apply_patch|Edit|Write|MultiEdit)$",
@@ -567,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    fn fail_closed_only_for_config_protection() {
+    fn remaining_shell_hooks_are_not_fail_closed() {
         let ConfigPlan::Write(out) = plan_config(None, BIN).unwrap() else {
             panic!()
         };
@@ -577,13 +570,11 @@ mod tests {
                 command_for(BIN, h.sub),
                 h.matcher,
                 h.timeout,
-                h.sub == "config-protection"
+                false
             );
             assert!(out.contains(&entry), "unexpected entry for {}", h.sub);
         }
-        assert!(HOOKS
-            .iter()
-            .all(|h| h.event == "pre_tool_call" || !h.fail_closed));
+        assert!(HOOKS.iter().all(|h| !h.fail_closed));
     }
 
     fn merged(src: &str) -> (String, Vec<&'static str>) {

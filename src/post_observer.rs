@@ -10,7 +10,20 @@ pub fn post_observer(payload: &Value) {
         return;
     }
     let tool = p.get("tool_name").and_then(Value::as_str).unwrap_or("");
-    if !["write_file", "patch", "Edit", "Write", "MultiEdit"].contains(&tool) {
+    if ![
+        "write_file",
+        "patch",
+        "edit",
+        "edit_file",
+        "write",
+        "apply_patch",
+        "str_replace_editor",
+        "Edit",
+        "Write",
+        "MultiEdit",
+    ]
+    .contains(&tool)
+    {
         return;
     }
     let Some(args) = p.get("tool_input").and_then(Value::as_object) else {

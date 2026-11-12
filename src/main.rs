@@ -143,10 +143,13 @@ fn valid_id(v: &str, max: usize, extra: &str) -> bool {
 mod config_protection;
 mod decide;
 mod enable;
+mod governance_capture;
 mod hookify;
 mod lifecycle;
+mod observe;
 mod post_observer;
 mod preflight;
+mod session_hooks;
 
 fn main() {
     let all: Vec<String> = std::env::args().skip(1).collect();
@@ -166,6 +169,9 @@ fn main() {
             "hookify",
             "post-observer",
             "lifecycle",
+            "session-hooks",
+            "governance-capture",
+            "observe",
         ]
         .contains(&command.as_str())
     {
@@ -183,6 +189,9 @@ fn main() {
         "hookify" => hookify::hookify(&payload),
         "post-observer" => post_observer::post_observer(&payload),
         "lifecycle" => lifecycle::lifecycle(&payload),
+        "session-hooks" => session_hooks::run(&payload),
+        "governance-capture" => governance_capture::run(&payload),
+        "observe" => observe::run(&payload),
         _ => unreachable!(),
     }
     let _ = io::stdout().flush();
