@@ -1,5 +1,4 @@
 use serde_json::{json, Value};
-use std::io::Write;
 
 const MAX_TEXT: usize = 1_048_576;
 
@@ -92,6 +91,9 @@ pub fn run(payload: &Value) {
             }
         }
     }
+    let Ok(store) = crate::state::StateStore::from_env() else {
+        return;
+    };
     for mut event in events {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -101,7 +103,9 @@ pub fn run(payload: &Value) {
         event["sessionId"] = session.map_or(Value::Null, |s| json!(s));
         event["resolvedAt"] = Value::Null;
         event["resolution"] = Value::Null;
-        let _ = writeln!(std::io::stderr(), "[governance] {}", event);
+        // Hermes captures and discards hook subprocess stderr. Persist the
+        // already-sanitized event so opt-in governance output is inspectable.
+        let _ = store.append("governance-capture", &event);
     }
 }
 
