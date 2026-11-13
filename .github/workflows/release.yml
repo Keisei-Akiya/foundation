@@ -52,11 +52,14 @@ jobs:
       - name: Smoke test installer against the built asset
         if: steps.check.outputs.release == 'true'
         run: |
-          FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes" --no-enable-plugin
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\n[ "$#" -eq 3 ] && [ "$1" = plugins ] && [ "$2" = enable ] && [ "$3" = foundation ]\n' > "$RUNNER_TEMP/bin/hermes"
+          chmod +x "$RUNNER_TEMP/bin/hermes"
+          PATH="$RUNNER_TEMP/bin:$PATH" FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes"
           test -x "$RUNNER_TEMP/hermes/bin/foundation"
           test -f "$RUNNER_TEMP/hermes/foundation/adapters/hermes/hooks/hooks.example.yaml"
           test ! -e "$RUNNER_TEMP/hermes/config.yaml"
-          FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes" --enable-hooks --no-enable-plugin
+          PATH="$RUNNER_TEMP/bin:$PATH" FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes" --enable-hooks
           test "$(grep -c -- '- command:' "$RUNNER_TEMP/hermes/config.yaml")" = 4
           test "$(grep -c '"command"' "$RUNNER_TEMP/hermes/shell-hooks-allowlist.json")" = 4
       - name: Publish (creates the tag)

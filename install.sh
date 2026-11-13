@@ -21,7 +21,7 @@ hermes_home="${HERMES_HOME:-${HOME:?HOME is not set}/.hermes}"
 
 usage() {
   cat <<EOF
-Usage: install.sh [--version X.Y.Z] [--hermes-home DIR] [--enable-plugin|--no-enable-plugin] [--enable-hooks]
+Usage: install.sh [--version X.Y.Z] [--hermes-home DIR] [--enable-plugin] [--enable-hooks]
 
 Installs foundation (foundation binary, adapters, skills, docs).
 
@@ -30,7 +30,6 @@ Installs foundation (foundation binary, adapters, skills, docs).
                      (merged into an existing hooks section if any), and approve
                      those hooks in the allowlist (opt-in).
   --enable-plugin    Enable the native foundation plugin with Hermes CLI (default).
-  --no-enable-plugin Install files without requiring the Hermes CLI.
   --hermes-home DIR  Target Hermes home (default: \$HERMES_HOME or ~/.hermes).
 
 Installed paths:
@@ -54,7 +53,6 @@ while [ $# -gt 0 ]; do
       hermes_home="$2"; shift ;;
     --enable-hooks) enable_hooks=1 ;;
     --enable-plugin) enable_plugin=1 ;;
-    --no-enable-plugin) enable_plugin=0 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument: $1" ;;
   esac
