@@ -38,10 +38,10 @@ class NativeConfigProtectionTests(unittest.TestCase):
             (self.bin_dir / "foundation").chmod(0o755)
 
     def _callback(self):
-        context = HookContext()
-        plugin.register(context)
-        self.assertIn("pre_tool_call", context.hooks)
-        return context.hooks["pre_tool_call"]
+        # Exercise the core dispatcher directly. register() also loads extension
+        # hooks, which may register the same event and overwrite this test double's
+        # single-callback slot; dispatch composition belongs to Hermes integration tests.
+        return plugin.on_pre_tool_call
 
     def test_real_binary_allows_unrelated_edit(self):
         self._install_real_binary()
@@ -183,7 +183,7 @@ class NativeConfigProtectionTests(unittest.TestCase):
         context = HookContext()
         plugin.register(context)
         with patch.object(plugin, "run_subcommand", return_value=None) as run_subcommand:
-            context.hooks["post_tool_call"](
+            plugin.on_post_tool_call(
                 tool_name="skill",
                 args={"skill": "demo"},
                 result={"error": "failed"},
