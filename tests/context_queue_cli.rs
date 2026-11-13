@@ -54,6 +54,19 @@ fn doc_warning_queues_only_suspicious_write_paths_and_pre_llm_drains_per_session
 }
 
 #[test]
+fn doc_file_warning_issue_alias_is_accepted() {
+    let home = std::env::temp_dir().join(format!("foundation-doc-alias-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    assert!(invoke(
+        "doc-file-warning",
+        r#"{"hook_event_name":"pre_tool_call","tool_name":"read_file","session_id":"s1"}"#,
+        &home
+    )
+    .is_empty());
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
 fn suggest_compact_counts_all_tool_calls_per_session_and_queues_at_threshold() {
     let home = std::env::temp_dir().join(format!("foundation-compact-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
