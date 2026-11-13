@@ -20,6 +20,18 @@ jobs:
         run: scripts/check-version-bump.sh "origin/${{ github.base_ref }}"
       - name: Test
         run: cargo test --locked
+      - name: Check Hermes post-tool integration
+        run: |
+          git clone https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
+          git -C "$RUNNER_TEMP/hermes-agent" checkout 3b421578588243f920886e6fe79a6faa87ea026e
+          python3 -m pip install --user uv
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv sync --project "$RUNNER_TEMP/hermes-agent" --locked
+          cargo build --locked --bin foundation
+          FOUNDATION_TEST_BINARY="$GITHUB_WORKSPACE/target/debug/foundation" \
+          HERMES_AGENT_ROOT="$RUNNER_TEMP/hermes-agent" \
+            uv run --project "$RUNNER_TEMP/hermes-agent" --with pytest \
+              python -m pytest -q tests/test_runtime_post_tool.py
       - name: Clippy
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
       - name: Format

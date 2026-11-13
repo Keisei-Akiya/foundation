@@ -24,10 +24,14 @@ def _install_logging_binary(runtime: IsolatedHermesHome) -> Path:
     wrapper = runtime.bin / "foundation"
     wrapper.write_text(
         "#!/usr/bin/env python3\n"
-        "import json, os, sys\n"
+        "import json, subprocess, sys\n"
+        "raw = sys.stdin.read()\n"
         f"with open({str(log)!r}, 'a', encoding='utf-8') as stream:\n"
-        "    stream.write(json.dumps({'command': sys.argv[1:], 'payload': json.load(sys.stdin)}) + '\\n')\n"
-        f"os.execv({str(real_binary)!r}, [{str(real_binary)!r}, *sys.argv[1:]])\n",
+        "    stream.write(json.dumps({'command': sys.argv[1:], 'payload': json.loads(raw)}) + '\\n')\n"
+        f"proc = subprocess.run([{str(real_binary)!r}, *sys.argv[1:]], input=raw, text=True, capture_output=True)\n"
+        "sys.stdout.write(proc.stdout)\n"
+        "sys.stderr.write(proc.stderr)\n"
+        "raise SystemExit(proc.returncode)\n",
         encoding="utf-8",
     )
     wrapper.chmod(0o755)
