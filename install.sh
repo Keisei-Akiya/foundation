@@ -2,7 +2,7 @@
 # foundation installer.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version 0.0.12
+#   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version 0.0.13
 #
 # Downloads the prebuilt release from GitHub Releases, verifies its SHA256, then
 # installs into <HERMES_HOME>. By default it never edits config.yaml or hook
