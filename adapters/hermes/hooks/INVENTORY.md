@@ -50,7 +50,7 @@ The issue number maps to the matching registration row above, not to its positio
 | #34 | `pre:mcp-health-check` | **Partial** | PR #73; `test_pre_mcp_health_hook_runs_through_hermes_plugin_manager` confirms native dispatch. No live connectivity probe/reconnect or full MCP naming coverage. |
 | #35 | `pre:edit-write:gateguard-fact-force` | **Partial** | PR #74; `test_gateguard_blocks_first_real_hermes_write_then_allows_retry` verifies first-write block/retry. ECC question and exception policies remain incomplete. |
 | #36 | `pre:hookify-runtime` | **Partial** | PR #72; `test_pre_tool_call_dispatches_project_hookify_rule_through_hermes` verifies a matching bash rule block only; broader events/actions unsupported. |
-| #37 | `prompt:hookify-runtime` | **Partial** | PR #71; `test_real_hermes_prompt_hook_blocks_matching_prompt` confirms `pre_llm_call`-based prompt block. This is not shell `UserPromptSubmit`/gateway-ingress timing (`docs/hermes-plugin-api.md:72`). |
+| #37 | `prompt:hookify-runtime` | **未達 (purpose)** | PR #71; `test_real_hermes_prompt_hook_blocks_matching_prompt` proves a separate `pre_llm_call` prompt blocker, not evaluation of project Hookify prompt rules; it does not satisfy ECC `UserPromptSubmit` purpose/timing (`docs/hermes-plugin-api.md:72`). |
 | #38 | `pre:compact` | **再現不能** | No pre-compaction callback; Hermes only exposes post-commit observer (`docs/hermes-plugin-api.md:73,90`; `out_w9e.md`). |
 | #39 | `session:start` | **Partial** | PR #71; `test_real_hermes_session_start_dispatches_lockfile_detection` confirms callback dispatch and lockfile detection. Restored context cannot be returned by `on_session_start` (`docs/hermes-plugin-api.md:74`). |
 | #40 | `session-start:plan-canvas-sessions` | **再現不能** | Plan Canvas API/queue absent (`out_w9e.md`); `pre_llm_call` can only serve as a generic first-turn context alternative, not Plan Canvas session resumption. |
@@ -102,7 +102,7 @@ Purpose wording and verdicts below are based on the ECC source comments/behavior
 | #52 | Notify desktop with task summary | Partial | Callback dispatch demonstrated; Linux implementation is no-op and other target platforms/display unverified. |
 | #53 | Clean up observer state and pass stdin through unchanged at session end | 未達 | Marker persistence does neither source-defined cleanup nor stdin/stdout passthrough. |
 
-**w13b distribution:** 1 Done / 22 Partial / 4 未達 (27 registrations).
+**w13b distribution:** 1 Done / 21 Partial / 5 未達 (27 registrations).
 
 ## Cross-cutting evidence and caveats
 
