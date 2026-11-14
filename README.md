@@ -15,7 +15,7 @@ GitHub Releases のビルド済み成果物を取得し、SHA256を検証して�
 curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
 ```
 
-バージョンを固定する場合は `sh -s -- --version 0.0.14` を付ける。
+バージョンを固定する場合は `sh -s -- --version 0.0.15` を付ける。
 配置先は次のとおり。
 
 - `<HERMES_HOME>/bin/foundation`
