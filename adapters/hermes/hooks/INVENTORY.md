@@ -2,7 +2,7 @@
 
 **Scope / method.** ECC's `ecc/hooks/hooks.metadata.json` lists 27 individual registrations (10 PreToolUse, 1 UserPromptSubmit, 1 PreCompact, 2 SessionStart, 2 PostToolUse, 2 PostToolUseFailure, 8 Stop, 1 SessionEnd). This inventory treats metadata entries as the countable registrations; consolidated dispatchers are one registration, with their child checks listed separately below. Evidence combines inspection of the Rust binary (`src/main.rs`), the sample configuration (`hooks.example.yaml`), and the Rust CLI tests (`tests/hooks_cli.rs`, `tests/config_protection_cli.rs`) summarized under “Cross-cutting evidence and caveats” (not live user configuration). “Confirmed” means the stated source contract or the specifically described test behavior was inspected/exercised; it does not imply broader parity. ECC paths are relative to `../ecc`; adapter paths are relative to this directory.
 
-**Status meanings:** **Done** = ECC behavior and Hermes firing verified; **Partial** = only scoped behavior is implemented or an event/configuration/runtime gap remains; **再現不能** = the required timing, API, state, or delivery contract is unavailable and no safe equivalent is implemented. A test of an isolated callback is not live Hermes verification. Do not infer parity from a matching filename.
+**Purpose-based status criteria (w12b).** Judge whether Hermes fulfils the ECC registration's stated purpose, not whether it fires at the same event. *Done candidate* = purpose is achieved by an implemented Hermes path and supported by a relevant test or live Hermes evidence; candidate does not claim full implementation parity. *Partial* = a purpose-relevant outcome exists, but a material part of the stated purpose/coverage is missing or unverified. *未達* = no purpose-relevant path is implemented; an event with a similar name is not evidence. Each status needs the purpose-bearing ECC definition/implementation and Foundation implementation plus test/runtime evidence; source inspection alone cannot establish Done candidate. Keep event, platform, consent, policy and safety qualifications explicit. This replaces event-timing equivalence as the status criterion.
 
 | ECC metadata ID (primary key) | ECC registration; trigger / actual behavior (evidence) | Hermes-side file/function or feature; evidence | Status, coverage limit, verification |
 |---|---|---|---|
@@ -68,7 +68,41 @@ The issue number maps to the matching registration row above, not to its positio
 | #52 | `stop:desktop-notify` | **Partial** | PR #71; `test_real_hermes_desktop_notify_hook_dispatches_on_linux` confirms dispatch, but Linux is a no-op and other-OS delivery is unverified. |
 | #53 | `session:end:marker` | **Partial** | PR #70; `test_stop_and_session_hooks_run_through_hermes_plugin_manager` confirms marker persistence. Uses `on_session_finalize`, not per-turn `on_session_end`. |
 
-**Issue totals (#29–#53, 25 issues): 22 Partial, 3 再現不能, 0 Done.** #38, #40 and #46 remain unsupported Plan Canvas/pre-compaction cases. No Done is claimed: the runtime tests establish firing or bounded behavior, not ECC-wide parity.
+## Purpose-based decisions (w12b)
+
+The table above preserves historical ECC event metadata. For decisions, use this purpose-oriented classification; runtime evidence is summarized in `out_w12b.md`. “Done candidate” is purpose-level only, while explicit limits remain applicable.
+
+| Issue | Purpose | Purpose-based decision | Evidence / remaining gap |
+|---:|---|---|---|
+| #27 | Consolidate Bash pre-tool checks (quality, tmux, push, GateGuard) | Partial | Preflight blocks `--no-verify`; hookify rule block demonstrated via Hermes. Other child policies and the full dispatcher remain incomplete. |
+| #28 | Gate destructive PowerShell and ask a fact-forcing question | Partial | Narrow lexical block exists; no question flow/full policy, branch runtime evidence absent. |
+| #29 | Warn about non-standard documentation writes | Partial | Real Hermes pre-LLM warning tested; output is delayed from write boundary, warning does not run as ECC write hook. |
+| #30 | Suggest compaction at logical/context-pressure intervals | Partial | Tool-count threshold suggestion tested; context-size/transcript signal absent. |
+| #31 | Record tool-phase observations and run enabled learning observer | Partial | Hermes runtime persists tool-name observation; no background analysis, project scope, or ECC filters/instinct evolution. |
+| #32 | Capture governance signals (secret/policy/approval events) | Partial | Sanitized event persisted and tested via Hermes; coverage omits several ECC event classes. |
+| #33 | Prevent edits that weaken lint/format configuration | Done candidate | Hermes test confirms protected config edit is blocked; allow cases covered. Candidate applies to implemented protected-path policy, not claims of all ECC policies. |
+| #34 | Detect unhealthy MCP servers and block calls | Partial | Failure is persisted and same-server calls blocked until TTL; reconnect/health recovery and broad runtime coverage remain. |
+| #35 | Gate first file edit with target/change-sensitive questions and exceptions | Partial | First write/retry gate tested; ECC target sensitivity, exceptions, hardlink/sensitive/subagent coverage incomplete. |
+| #36 | Evaluate project Hookify rules for tool calls | Partial | Hermes bash rule block verified; other event types/actions/matching remain missing. |
+| #37 | Evaluate project Hookify rules on user prompts | Partial | Hermes pre-LLM prompt block tested; event differs from submit boundary and broader rule semantics not established. |
+| #38 | Save useful state before context compaction | 未達 | No pre-compaction callback exists. Post-compaction cannot reconstruct state already lost; see contract analysis below. |
+| #39 | Restore prior context and detect package manager at session start | Partial | Package-manager detection fires; no prompt/context restoration. |
+| #40 | Surface open Plan Canvas review sessions to resume | 未達 | No Plan Canvas state/API/queue or demonstrated persistence adapter; generic first-turn callback alone cannot supply missing data. |
+| #41 | Dispatch synchronous post-tool child hooks and preserve controls | Partial | Observer/lifecycle dispatch exists; arbitrary children/control preservation not equivalent. |
+| #42 | Run post-tool child hooks asynchronously without blocking | Partial | Detached worker nonblocking/persistent skill-run behavior tested; no general child registry/control preservation. |
+| #43 | Track failed MCP calls, unhealthy servers and reconnect | Partial | Failure persisted; same-server blocked until TTL; reconnect strategy and end-to-end ECC recovery remain. |
+| #44 | Record hard Skill-tool failures for skill-health telemetry | Partial | Hermes success/failure invocation telemetry tested; no health aggregation/evolution. |
+| #45 | Evaluate completion Hookify rules before stop | Partial | pre_verify path fires through Hermes and dispatches stop-hookify; continued-stop semantics/rule parity remain incomplete. |
+| #46 | Deliver pending Plan Canvas feedback before stopping | 未達 | No Plan Canvas pending queue or user-visible stop-time delivery; generic session persistence does not deliver feedback. |
+| #47 | Format and typecheck changed JS/TS files before finish | Partial | pre_verify dispatch is live, but formatter/typecheck changed-file behavior has not been established. |
+| #48 | Find console.log in modified files before finish | Partial | Post-observer can inspect a tool-edited file; no full response changed-file scan / reliable user-visible gate. |
+| #49 | Persist session state after every response | Partial | Session summary evidence exists at session end; per-response Stop cadence/transcript-path semantics are not proven. |
+| #50 | Evaluate session for reusable patterns | 未達 | No session-content evaluation/approved pattern extraction. |
+| #51 | Aggregate token and cost metrics per session | Partial | Hermes usage/token totals persist; price/cost calculation and coverage remain absent. |
+| #52 | Notify desktop with task summary | Partial | Callback dispatch demonstrated; Linux implementation is no-op and other target platforms/display unverified. |
+| #53 | Record non-blocking session lifecycle marker | Done candidate | Runtime test verifies marker, session id and restrictive file mode; purpose is the lifecycle marker, not every intermediate event. |
+
+**w12b distribution:** 2 Done candidates / 21 Partial / 4 未達.
 
 ## Cross-cutting evidence and caveats
 
