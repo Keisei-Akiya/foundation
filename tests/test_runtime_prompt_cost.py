@@ -133,7 +133,9 @@ def test_real_hermes_cost_hooks_persist_usage_and_session_total(live_foundation)
     assert totals[0]["output_tokens"] == 4
     assert totals[0]["cache_write_tokens"] == 2
     assert totals[0]["cache_read_tokens"] == 3
-    assert totals[0]["cost"] == "not_calculated"
+    assert totals[0]["cost_status"] == "unavailable"
+    assert totals[0]["cost_unavailable_reason"] == "unknown_model_price"
+    assert "estimated_cost_usd" not in totals[0]
     assert "must not be persisted" not in path.read_text(encoding="utf-8")
 
 

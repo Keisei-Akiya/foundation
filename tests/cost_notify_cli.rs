@@ -30,6 +30,12 @@ fn invoke(hook: &str, payload: &str, home: &std::path::Path) -> (i32, String, St
 fn usage_is_saved_and_session_total_contains_token_counts_only() {
     let home = std::env::temp_dir().join(format!("foundation-cost-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join("plugin-data/foundation")).unwrap();
+    std::fs::write(
+        home.join("plugin-data/foundation/model-pricing.json"),
+        r#"{"model-x":{"input_usd_per_million":2.0,"output_usd_per_million":8.0}}"#,
+    )
+    .unwrap();
     let request = r#"{"hook_event_name":"post_api_request","session_id":"s1","api_request_id":"r1","response_model":"model-x","usage":{"input_tokens":10,"output_tokens":4,"cache_creation_input_tokens":2,"cache_read_input_tokens":3}}"#;
     let (code, stdout, stderr) = invoke("cost-tracker", request, &home);
     assert_eq!(code, 0);
@@ -53,8 +59,31 @@ fn usage_is_saved_and_session_total_contains_token_counts_only() {
     assert_eq!(rows[1]["output_tokens"], 4);
     assert_eq!(rows[1]["cache_write_tokens"], 2);
     assert_eq!(rows[1]["cache_read_tokens"], 3);
-    assert_eq!(rows[1]["cost"], "not_calculated");
+    assert_eq!(rows[1]["cost_status"], "calculated");
+    assert_eq!(rows[1]["estimated_cost_usd"], 0.000052);
+    assert!(rows[1].get("cost_unavailable_reason").is_none());
     assert!(!rows.iter().any(|r| r.to_string().contains("private text")));
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
+fn unknown_model_price_is_recorded_without_a_cost() {
+    let home = std::env::temp_dir().join(format!("foundation-cost-unknown-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    let request = r#"{"hook_event_name":"post_api_request","session_id":"s-unknown","response_model":"subscription-model","usage":{"input_tokens":10,"output_tokens":4}}"#;
+    assert_eq!(invoke("cost-tracker", request, &home).0, 0);
+    let end = r#"{"hook_event_name":"post_llm_call","session_id":"s-unknown"}"#;
+    assert_eq!(invoke("cost-tracker", end, &home).0, 0);
+    let path = home.join("plugin-data/foundation/cost_tracker.jsonl");
+    let rows: Vec<Value> = std::fs::read_to_string(path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let total = rows.last().unwrap();
+    assert_eq!(total["cost_status"], "unavailable");
+    assert_eq!(total["cost_unavailable_reason"], "unknown_model_price");
+    assert!(total.get("estimated_cost_usd").is_none());
     let _ = std::fs::remove_dir_all(home);
 }
 

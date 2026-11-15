@@ -70,24 +70,56 @@ pub fn run(payload: &Value) {
         });
         let (mut input, mut output, mut cache_write, mut cache_read) = (0u64, 0u64, 0u64, 0u64);
         let mut model = "unknown";
+        let mut cost = 0.0_f64;
+        let mut priced = true;
+        let prices = std::fs::read(store.root().join("model-pricing.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            .unwrap_or(Value::Null);
         for row in rows {
-            input += count(row, "input_tokens");
-            output += count(row, "output_tokens");
+            let row_input = count(row, "input_tokens");
+            let row_output = count(row, "output_tokens");
+            input += row_input;
+            output += row_output;
             cache_write += count(row, "cache_write_tokens");
             cache_read += count(row, "cache_read_tokens");
             if let Some(m) = row.get("model").and_then(Value::as_str) {
                 model = m;
             }
+            let rates = row
+                .get("model")
+                .and_then(Value::as_str)
+                .and_then(|name| prices.get(name));
+            let input_rate = rates
+                .and_then(|r| r.get("input_usd_per_million"))
+                .and_then(Value::as_f64);
+            let output_rate = rates
+                .and_then(|r| r.get("output_usd_per_million"))
+                .and_then(Value::as_f64);
+            match (input_rate, output_rate) {
+                (Some(input_rate), Some(output_rate))
+                    if input_rate >= 0.0 && output_rate >= 0.0 =>
+                {
+                    cost += row_input as f64 * input_rate / 1_000_000.0;
+                    cost += row_output as f64 * output_rate / 1_000_000.0;
+                }
+                _ => priced = false,
+            }
         }
-        let _ = store.append(
-            "cost_tracker",
-            &json!({
-                "kind":"session_total", "session_id":session, "model":model,
-                "input_tokens":input, "output_tokens":output,
-                "cache_write_tokens":cache_write, "cache_read_tokens":cache_read,
-                "cost":"not_calculated"
-            }),
-        );
+        let cost_fields = if priced {
+            json!({"cost_status":"calculated", "estimated_cost_usd":(cost * 1_000_000.0).round() / 1_000_000.0})
+        } else {
+            json!({"cost_status":"unavailable", "cost_unavailable_reason":"unknown_model_price"})
+        };
+        let mut total = json!({
+            "kind":"session_total", "session_id":session, "model":model,
+            "input_tokens":input, "output_tokens":output,
+            "cache_write_tokens":cache_write, "cache_read_tokens":cache_read
+        });
+        if let (Some(object), Some(fields)) = (total.as_object_mut(), cost_fields.as_object()) {
+            object.extend(fields.clone());
+        }
+        let _ = store.append("cost_tracker", &total);
     }
 }
 
