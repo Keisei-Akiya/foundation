@@ -14,16 +14,72 @@ fn first_count(usage: &Value, keys: &[&str]) -> u64 {
 
 fn usage_record(payload: &Value) -> Value {
     let usage = payload.get("usage").unwrap_or(&Value::Null);
+    let raw_input = first_count(usage, &["prompt_tokens", "input_tokens"]);
+    let cache_read = first_count(usage, &["cache_read_input_tokens", "cached_tokens"]);
+    // OpenAI-style prompt_tokens includes cached_tokens. Anthropic's input_tokens
+    // reports uncached input, while cache read/write counts are separate.
+    let input_tokens =
+        if usage.get("prompt_tokens").is_some() && usage.get("cached_tokens").is_some() {
+            raw_input.saturating_sub(cache_read)
+        } else {
+            raw_input
+        };
     json!({
         "kind": "api_usage",
         "session_id": payload.get("session_id").and_then(Value::as_str).unwrap_or(""),
         "api_request_id": payload.get("api_request_id").cloned().unwrap_or(Value::Null),
         "model": payload.get("response_model").or_else(|| payload.get("model")).and_then(Value::as_str).unwrap_or("unknown"),
-        "input_tokens": first_count(usage, &["prompt_tokens", "input_tokens"]),
+        "input_tokens": input_tokens,
         "output_tokens": first_count(usage, &["completion_tokens", "output_tokens"]),
         "cache_write_tokens": count(usage, "cache_creation_input_tokens"),
-        "cache_read_tokens": first_count(usage, &["cache_read_input_tokens", "cached_tokens"]),
+        "cache_read_tokens": cache_read,
     })
+}
+
+/// Print the latest per-session totals without exposing prompts or other content.
+pub fn report() {
+    let Ok(store) = StateStore::from_env() else {
+        println!("No session cost records yet.");
+        return;
+    };
+    let mut totals: std::collections::BTreeMap<String, Value> = std::collections::BTreeMap::new();
+    for row in store.read("cost_tracker").unwrap_or_default() {
+        if row.get("kind").and_then(Value::as_str) == Some("session_total") {
+            if let Some(session) = row.get("session_id").and_then(Value::as_str) {
+                totals.insert(session.to_owned(), row);
+            }
+        }
+    }
+    if totals.is_empty() {
+        println!("No session cost records yet.");
+        return;
+    }
+    println!("Session\tModel\tInput tokens\tOutput tokens\tEstimated cost (USD)");
+    for (session, row) in totals {
+        let model = row
+            .get("model")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        let input = count(&row, "input_tokens");
+        let output = count(&row, "output_tokens");
+        match row.get("cost_status").and_then(Value::as_str) {
+            Some("calculated") => {
+                let cost = row
+                    .get("estimated_cost_usd")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0);
+                println!("{session}\t{model}\t{input}\t{output}\t${cost:.8}");
+            }
+            _ => {
+                let reason = match row.get("cost_unavailable_reason").and_then(Value::as_str) {
+                    Some("unknown_cache_price") => "No configured cache price for this model",
+                    Some("unknown_model_price") => "No configured price for this model",
+                    _ => "Price unavailable (check model-pricing.json)",
+                };
+                println!("{session}\t{model}\t{input}\t{output}\tunavailable: {reason}");
+            }
+        }
+    }
 }
 
 pub fn run(payload: &Value) {
@@ -138,6 +194,24 @@ pub fn run(payload: &Value) {
 mod tests {
     use super::usage_record;
     use serde_json::json;
+
+    #[test]
+    fn subtracts_cached_tokens_in_prompt_total_to_avoid_double_charging() {
+        let row = usage_record(&json!({"session_id":"s1", "model":"m1", "usage":{
+            "prompt_tokens":100, "completion_tokens":4, "cached_tokens":30
+        }}));
+        assert_eq!(row["input_tokens"], 70);
+        assert_eq!(row["cache_read_tokens"], 30);
+    }
+
+    #[test]
+    fn leaves_provider_net_input_tokens_unchanged_when_cache_is_separate() {
+        let row = usage_record(&json!({"session_id":"s1", "model":"m1", "usage":{
+            "input_tokens":70, "output_tokens":4, "cache_read_input_tokens":30
+        }}));
+        assert_eq!(row["input_tokens"], 70);
+        assert_eq!(row["cache_read_tokens"], 30);
+    }
 
     #[test]
     fn records_usage_without_adding_an_unconfigured_price() {

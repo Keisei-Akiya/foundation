@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -136,7 +137,18 @@ def test_real_hermes_cost_hooks_persist_usage_and_session_total(live_foundation)
     assert totals[0]["cost_status"] == "unavailable"
     assert totals[0]["cost_unavailable_reason"] == "unknown_model_price"
     assert "estimated_cost_usd" not in totals[0]
+    report = subprocess.run(
+        [str(runtime.bin / "foundation"), "cost-report"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+    )
+    assert "runtime-cost-test" in report.stdout
+    assert "unavailable" in report.stdout
+    assert "No configured price for this model" in report.stdout
     assert "must not be persisted" not in path.read_text(encoding="utf-8")
+    assert "must not be persisted" not in report.stdout
 
 
 def test_real_hermes_desktop_notify_hook_dispatches_on_linux(live_foundation):

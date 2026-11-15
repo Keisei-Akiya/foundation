@@ -175,6 +175,49 @@ fn cost_tracker_fails_open_when_append_fails() {
 }
 
 #[test]
+fn cost_report_displays_the_session_amount_to_the_user() {
+    let home = std::env::temp_dir().join(format!("foundation-cost-report-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join("plugin-data/foundation")).unwrap();
+    std::fs::write(
+        home.join("plugin-data/foundation/cost_tracker.jsonl"),
+        "{\"kind\":\"session_total\",\"session_id\":\"s1\",\"input_tokens\":15,\"output_tokens\":5,\"cache_write_tokens\":2,\"cache_read_tokens\":3,\"cost_status\":\"calculated\",\"estimated_cost_usd\":0.0000825}\n",
+    )
+    .unwrap();
+    let (code, stdout, stderr) = invoke("cost-report", "", &home);
+    assert_eq!(code, 0);
+    assert!(stderr.is_empty());
+    assert!(stdout.contains("s1"));
+    assert!(stdout.contains("15"));
+    assert!(stdout.contains("5"));
+    assert!(stdout.contains("$0.00008250"));
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
+fn cost_report_explains_when_a_session_price_is_unknown() {
+    let home = std::env::temp_dir().join(format!(
+        "foundation-cost-report-unknown-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join("plugin-data/foundation")).unwrap();
+    std::fs::write(
+        home.join("plugin-data/foundation/cost_tracker.jsonl"),
+        "{\"kind\":\"session_total\",\"session_id\":\"s-unknown\",\"input_tokens\":10,\"output_tokens\":4,\"cost_status\":\"unavailable\",\"cost_unavailable_reason\":\"unknown_model_price\"}\n",
+    )
+    .unwrap();
+    let (code, stdout, stderr) = invoke("cost-report", "", &home);
+    assert_eq!(code, 0);
+    assert!(stderr.is_empty());
+    assert!(stdout.contains("s-unknown"));
+    assert!(stdout.contains("unavailable"));
+    assert!(stdout.contains("No configured price for this model"));
+    assert!(!stdout.contains("$0.00000000"));
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
 fn desktop_notify_is_noop_on_linux_and_ignores_conversation_content() {
     let home = std::env::temp_dir().join(format!("foundation-notify-{}", std::process::id()));
     let payload = r#"{"hook_event_name":"post_llm_call","session_id":"s1","assistant_response":"private text"}"#;
