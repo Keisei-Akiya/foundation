@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from adapters.hermes.plugin.hooks_ext import stop_cost_notify
+from adapters.hermes.plugin.hooks_ext import stop_cost_notify, stop_desktop_notify
 
 
 def _callbacks():
@@ -30,6 +30,7 @@ def _callbacks():
     })()
     ctx = Context()
     stop_cost_notify.register(ctx, core)
+    stop_desktop_notify.register(ctx, core)
     return ctx.hooks, calls
 
 
@@ -38,8 +39,13 @@ def test_post_api_request_and_post_llm_call_dispatch_only_token_data():
     hooks["post_api_request"][0](session_id="s1", api_request_id="r1", response_model="model-x",
                                 usage={"prompt_tokens": 7, "completion_tokens": 3,
                                        "cached_tokens": 1})
+    # Desktop notification correlation starts at pre_llm_call and requires the
+    # same session/turn identifiers at post_llm_call.
+    for callback in hooks["pre_llm_call"]:
+        callback(session_id="s1", task_id="task-1", turn_id="turn-1")
     for callback in hooks["post_llm_call"]:
-        callback(session_id="s1", assistant_response="private text", model="model-x")
+        callback(session_id="s1", task_id="task-1", turn_id="turn-1",
+                 assistant_response="private text", model="model-x")
     assert [call[0] for call in calls] == ["cost-tracker", "cost-tracker", "desktop-notify"]
     api_payload = calls[0][1]
     assert api_payload["usage"]["prompt_tokens"] == 7
@@ -51,7 +57,9 @@ def test_post_api_request_and_post_llm_call_dispatch_only_token_data():
 
 def test_linux_notification_hook_dispatch_is_best_effort():
     hooks, calls = _callbacks()
-    hooks["post_llm_call"][1](session_id="s1", assistant_response="private text", model="model-x")
+    hooks["pre_llm_call"][0](session_id="s1", task_id="task-1", turn_id="turn-1")
+    hooks["post_llm_call"][1](session_id="s1", task_id="task-1", turn_id="turn-1",
+                               assistant_response="private text", model="model-x")
     assert len(calls) == 1
     assert calls[0][0] == "desktop-notify"
     assert "assistant_response" not in calls[0][1]

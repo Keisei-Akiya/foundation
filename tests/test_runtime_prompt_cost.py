@@ -115,8 +115,16 @@ def test_real_hermes_cost_hooks_persist_usage_and_session_total(live_foundation)
         usage={"input_tokens": 10, "output_tokens": 4, "cache_creation_input_tokens": 2, "cache_read_input_tokens": 3},
     )
     invoke_hook(
+        "pre_llm_call",
+        session_id="runtime-cost-test",
+        task_id="runtime-cost-task",
+        turn_id="runtime-cost-turn",
+    )
+    invoke_hook(
         "post_llm_call",
         session_id="runtime-cost-test",
+        task_id="runtime-cost-task",
+        turn_id="runtime-cost-turn",
         model="model-x",
         assistant_response="must not be persisted",
     )
@@ -141,8 +149,16 @@ def test_real_hermes_desktop_notify_hook_dispatches_on_linux(live_foundation):
     runtime, trace = live_foundation
 
     invoke_hook(
+        "pre_llm_call",
+        session_id="runtime-notify-test",
+        task_id="runtime-notify-task",
+        turn_id="runtime-notify-turn",
+    )
+    invoke_hook(
         "post_llm_call",
         session_id="runtime-notify-test",
+        task_id="runtime-notify-task",
+        turn_id="runtime-notify-turn",
         model="model-x",
         assistant_response="private response",
     )
