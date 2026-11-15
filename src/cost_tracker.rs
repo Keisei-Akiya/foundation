@@ -71,7 +71,7 @@ pub fn run(payload: &Value) {
         let (mut input, mut output, mut cache_write, mut cache_read) = (0u64, 0u64, 0u64, 0u64);
         let mut model = "unknown";
         let mut cost = 0.0_f64;
-        let mut priced = true;
+        let mut unavailable_reason = None;
         let prices = std::fs::read(store.root().join("model-pricing.json"))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
@@ -96,20 +96,31 @@ pub fn run(payload: &Value) {
             let output_rate = rates
                 .and_then(|r| r.get("output_usd_per_million"))
                 .and_then(Value::as_f64);
-            match (input_rate, output_rate) {
-                (Some(input_rate), Some(output_rate))
-                    if input_rate >= 0.0 && output_rate >= 0.0 =>
-                {
-                    cost += row_input as f64 * input_rate / 1_000_000.0;
-                    cost += row_output as f64 * output_rate / 1_000_000.0;
-                }
-                _ => priced = false,
+            let cache_write_tokens = count(row, "cache_write_tokens");
+            let cache_read_tokens = count(row, "cache_read_tokens");
+            let cache_write_rate = rates
+                .and_then(|r| r.get("cache_write_usd_per_million"))
+                .and_then(Value::as_f64);
+            let cache_read_rate = rates
+                .and_then(|r| r.get("cache_read_usd_per_million"))
+                .and_then(Value::as_f64);
+            if !matches!((input_rate, output_rate), (Some(i), Some(o)) if i >= 0.0 && o >= 0.0) {
+                unavailable_reason.get_or_insert("unknown_model_price");
+            } else if (cache_write_tokens > 0 && !cache_write_rate.is_some_and(|rate| rate >= 0.0))
+                || (cache_read_tokens > 0 && !cache_read_rate.is_some_and(|rate| rate >= 0.0))
+            {
+                unavailable_reason.get_or_insert("unknown_cache_price");
+            } else {
+                cost += row_input as f64 * input_rate.unwrap() / 1_000_000.0;
+                cost += row_output as f64 * output_rate.unwrap() / 1_000_000.0;
+                cost += cache_write_tokens as f64 * cache_write_rate.unwrap_or(0.0) / 1_000_000.0;
+                cost += cache_read_tokens as f64 * cache_read_rate.unwrap_or(0.0) / 1_000_000.0;
             }
         }
-        let cost_fields = if priced {
-            json!({"cost_status":"calculated", "estimated_cost_usd":(cost * 1_000_000.0).round() / 1_000_000.0})
+        let cost_fields = if unavailable_reason.is_none() {
+            json!({"cost_status":"calculated", "estimated_cost_usd":cost})
         } else {
-            json!({"cost_status":"unavailable", "cost_unavailable_reason":"unknown_model_price"})
+            json!({"cost_status":"unavailable", "cost_unavailable_reason":unavailable_reason.unwrap_or("unknown_model_price")})
         };
         let mut total = json!({
             "kind":"session_total", "session_id":session, "model":model,
