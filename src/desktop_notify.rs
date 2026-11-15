@@ -1,101 +1,59 @@
-//! Opt-in desktop notifications on macOS and WSL; Linux is intentionally a no-op.
-use serde_json::Value;
-use std::process::Command;
+//! Opt-in long-turn completion notifications via a configured Discord webhook.
+use serde_json::{json, Value};
+use std::time::Duration;
+
+const DEFAULT_THRESHOLD_SECONDS: u64 = 600;
 
 fn enabled() -> bool {
     std::env::var("FOUNDATION_DESKTOP_NOTIFY")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
 
-fn apple_quote(value: &str) -> String {
-    value
-        .replace('\\', "")
-        .replace('"', "“")
-        .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .collect()
+fn threshold_seconds() -> u64 {
+    std::env::var("FOUNDATION_DESKTOP_NOTIFY_THRESHOLD_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(DEFAULT_THRESHOLD_SECONDS)
 }
 
-fn powershell_quote(value: &str) -> String {
-    value.replace('\'', "''")
-}
-
-fn wsl() -> bool {
-    std::fs::read_to_string("/proc/version")
-        .map(|s| s.to_ascii_lowercase().contains("microsoft"))
-        .unwrap_or(false)
-}
-
-/// Return executable and argv for tests and callers; never invokes the command.
-pub fn command_for(os: &str, is_wsl: bool) -> Option<(String, Vec<String>)> {
-    const TITLE: &str = "Claude Code";
-    const BODY: &str = "Task completed"; // Never copy conversation text into notifications.
-    match os {
-        "macos" => Some((
-            "osascript".into(),
-            vec![
-                "-e".into(),
-                format!(
-                    "display notification \"{}\" with title \"{}\"",
-                    apple_quote(BODY),
-                    apple_quote(TITLE)
-                ),
-            ],
-        )),
-        "linux" if is_wsl => Some((
-            "powershell.exe".into(),
-            vec![
-                "-Command".into(),
-                format!(
-                    "Import-Module BurntToast; New-BurntToastNotification -Text '{}', '{}'",
-                    powershell_quote(TITLE),
-                    powershell_quote(BODY)
-                ),
-            ],
-        )),
-        _ => None,
+fn trusted_webhook_url(value: &str) -> bool {
+    let Ok(url) = ureq::http::Uri::try_from(value) else {
+        return false;
+    };
+    match (url.scheme_str(), url.host()) {
+        (Some("https"), Some(host)) => !host.is_empty(),
+        (Some("http"), Some("127.0.0.1" | "localhost" | "[::1]")) => true,
+        _ => false,
     }
 }
 
-pub fn run(_payload: &Value) {
+/// Send only a constant, content-free message. Errors are intentionally ignored.
+pub fn run(payload: &Value) {
     if !enabled() {
         return;
     }
-    let os = match std::env::consts::OS {
-        "macos" => "macos",
-        "linux" => "linux",
-        _ => "other",
-    };
-    let Some((program, args)) = command_for(os, wsl()) else {
+    let Some(elapsed) = payload.get("elapsed_seconds").and_then(Value::as_u64) else {
         return;
     };
-    let _ = Command::new(program)
-        .args(args)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-}
-
-#[cfg(test)]
-mod tests {
-    use super::command_for;
-
-    #[test]
-    fn assembles_platform_commands_without_executing_them() {
-        let (program, args) = command_for("macos", false).unwrap();
-        assert_eq!(program, "osascript");
-        assert!(args.join(" ").contains("Task completed"));
-        let (program, args) = command_for("linux", true).unwrap();
-        assert_eq!(program, "powershell.exe");
-        assert!(args.join(" ").contains("BurntToast"));
-        assert!(command_for("linux", false).is_none());
+    if elapsed < threshold_seconds() {
+        return;
+    }
+    let Ok(webhook) = std::env::var("FOUNDATION_DESKTOP_NOTIFY_WEBHOOK") else {
+        return;
+    };
+    if !trusted_webhook_url(&webhook) {
+        return;
     }
 
-    #[test]
-    fn command_text_is_constant_and_does_not_include_user_content() {
-        let (_, args) = command_for("macos", false).unwrap();
-        assert!(!args.join(" ").contains("assistant_response"));
-    }
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(2)))
+        .build()
+        .new_agent();
+    let body = json!({"content": format!("Long task completed ({elapsed}s).")});
+    let _ = agent
+        .post(&webhook)
+        .header("content-type", "application/json")
+        .send(body.to_string());
 }
