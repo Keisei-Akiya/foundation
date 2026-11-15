@@ -5,6 +5,7 @@ ECCからHermesへのhook移植、アダプター、スキル、テスト、ド�
 `adapters/`、`skills/`、`docs/`、バイナリはその構成要素であり、個別の製品ではない。
 対応範囲の根拠は `adapters/hermes/hooks/INVENTORY.md` のECC 27 registration調査を参照。
 調査時の全件を移植したとは主張しない。
+Rust、Python、uv などの言語の役割と選ぶ理由は [技術選定](docs/technology-selection.md) を参照。
 
 ## インストール
 
