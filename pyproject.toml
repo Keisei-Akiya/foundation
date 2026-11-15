@@ -1,0 +1,17 @@
+[project]
+name = "foundation-hermes-plugin"
+version = "0.0.0"
+description = "foundation の Hermes plugin（Python 側）のテスト用。配布はしない。"
+requires-python = ">=3.11,<3.15"
+# 実行時の依存は持たない。Hermes 本体の環境を使う。
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+# Python パッケージとしては配布しない。Rust の Cargo.toml が配布物の version を持つ。
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

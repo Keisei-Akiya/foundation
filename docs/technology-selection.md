@@ -51,14 +51,22 @@ Python 側で分岐を増やすと、shell hook 形式との挙動差が生ま�
 
 選ぶ理由：
 - テストに必要なのは `pytest` だけで、Python の実行環境と依存は Hermes のものを使う。
-  `uv run --with pytest --python "$HERMES_PYTHON"` なら、リポジトリに `pyproject.toml` や仮想環境を持たずに済む。
+  `uv run --project "$HERMES_AGENT_ROOT" --with pytest --python "$HERMES_PYTHON"` なら、Hermes の環境のままテストを走らせられる。
 - `mise run runtime-test` と CI の両方が、すでにこの形で使っている。
 
 決まり：
 - このリポジトリで uv を使ってよい。
-- Python の依存をリポジトリに固定する `pyproject.toml` は、現時点では置かない。
+- ルートに `pyproject.toml` と `uv.lock` を置く。
+  役割は、Python のバージョン範囲（Hermes に合わせて `>=3.11,<3.15`）と、テスト道具（`dev` グループの `pytest`）の宣言である。
+- 実行時の依存は宣言しない（`dependencies = []`）。
   Hermes 側の環境が依存の正であり、二重管理を避けるためである。
-- Python パッケージとして配布する必要が出たときに、この決まりを見直す。
+- `package = false` とし、Python パッケージとしては配布しない。
+  配布物の version は `Cargo.toml` が持つ。
+- Hermes を使う結合テストは、これまでどおり `--project` で Hermes の環境を指定して実行する。
+  ルートの `pyproject.toml` はその実行に影響しない。
+- 素の `uv run pytest` では動かない。
+  テストが Hermes のソースを import し、その依存（`ruamel.yaml` など）をルートの環境が持たないためである。
+  テストは必ず上の `--project` 付きで実行する。
 
 ### シェル（`install.sh`、`scripts/`）
 
