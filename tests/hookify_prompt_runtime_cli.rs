@@ -104,6 +104,14 @@ fn hookify_prompt_defaults_to_warn_action() {
 }
 
 #[test]
+fn missing_hookify_prompt_rules_fail_open() {
+    let root = project();
+    let result = invoke(&root, "ordinary prompt");
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(result.is_null());
+}
+
+#[test]
 fn malformed_prompt_rule_fails_open() {
     let root = project();
     std::fs::write(
