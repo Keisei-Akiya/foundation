@@ -47,7 +47,10 @@ def register(ctx, core):
             began = started.pop(key, None)
         if began is None:
             return None
-        elapsed = max(0, math.ceil(time.monotonic() - began))
+        now = time.monotonic()
+        if now - began > _START_TTL_SECONDS:
+            return None
+        elapsed = max(0, math.ceil(now - began))
         try:
             core.run_subcommand(
                 "desktop-notify",
