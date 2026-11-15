@@ -47,8 +47,10 @@ fn session_end_persists_only_minimal_summary_metadata_on_post_llm_call() {
     let path = home.join("plugin-data/foundation/session-summary.jsonl");
     let text = std::fs::read_to_string(path).unwrap();
     let record: Value = serde_json::from_str(text.trim()).unwrap();
-    assert_eq!(record["user_message_count"], 2);
     assert_eq!(record["session_id"], "session-123");
+    assert!(record["summary"].as_str().unwrap().contains("Purpose:"));
+    assert!(record["summary"].as_str().unwrap().contains("Progress:"));
+    assert!(record["summary"].as_str().unwrap().contains("Unfinished:"));
     assert!(!text.contains("private prompt") && !text.contains("private response"));
     let _ = std::fs::remove_dir_all(home);
 }

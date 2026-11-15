@@ -47,7 +47,11 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
             for result in verify_results
         )
 
-        history = [{"role": "user", "content": f"private prompt {i}"} for i in range(10)]
+        history: list[dict[str, object]] = [
+            {"role": "user", "content": f"private prompt {i} /home/private export TOKEN=secret cargo test"}
+            for i in range(10)
+        ]
+        history.append({"role": "assistant", "tool_name": "todo", "todos": [{"status": "pending", "content": "private todo"}]})
         invoke_hook(
             "post_llm_call",
             session_id="runtime-stop-session-test",
@@ -81,9 +85,27 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
         summary = json.loads(summary_text.splitlines()[0])
         assert summary["event"] == "stop:session-end"
         assert summary["session_id"] == "runtime-stop-session-test"
-        assert summary["user_message_count"] == 10
-        assert "private prompt" not in summary_text
-        assert "private response" not in summary_text
+        assert "Purpose:" in summary["summary"]
+        assert "Progress:" in summary["summary"]
+        assert "Unfinished: 1 of 1" in summary["summary"]
+        for forbidden in ("private prompt", "private response", "private todo", "/home/", "TOKEN=secret", "cargo test"):
+            assert forbidden not in summary_text
+
+        second_session = "runtime-second-session-test"
+        second_turn_results = invoke_hook(
+            "pre_llm_call",
+            session_id=second_session,
+            is_first_turn=True,
+            turn_index=0,
+            user_message="continue",
+            cwd=str(project),
+        )
+        assert any(
+            isinstance(result, dict)
+            and "Purpose:" in result.get("context", "")
+            and "Unfinished: 1 of 1" in result.get("context", "")
+            for result in second_turn_results
+        )
 
         evaluation_text = (data / "session-evaluation.jsonl").read_text(encoding="utf-8")
         evaluation = json.loads(evaluation_text.splitlines()[0])

@@ -50,20 +50,31 @@ fn injects_last_session_summary_only_on_first_turn() {
     std::fs::create_dir_all(&store).unwrap();
     std::fs::write(
         store.join("session-summary.jsonl"),
-        "{\"summary\":\"Resume task 42\"}\n",
+        "{\"session_id\":\"older-session\",\"summary\":\"Older context\"}\n{\"session_id\":\"session-123\",\"summary\":\"Resume task 42\"}\n{\"summary\":\"Malformed legacy record\"}\n",
     )
     .unwrap();
-    let payload = |first| {
-        serde_json::json!({"cwd":"/nonexistent/project","hook_event_name":"pre_llm_call","user_message":"hello","is_first_turn":first}).to_string()
+    let payload = |session_id: &str, first: bool| {
+        serde_json::json!({"cwd":"/nonexistent/project","hook_event_name":"pre_llm_call","user_message":"hello","session_id":session_id,"is_first_turn":first}).to_string()
     };
-    let (code, stdout) = invoke(&payload(true), &home);
+    let (code, stdout) = invoke(&payload("session-123", true), &home);
+    assert_eq!(code, 0);
+    let result: Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert!(result["context"]
+        .as_str()
+        .unwrap()
+        .contains("Older context"));
+    assert!(!result["context"]
+        .as_str()
+        .unwrap()
+        .contains("Resume task 42"));
+    let (code, stdout) = invoke(&payload("session-456", true), &home);
     assert_eq!(code, 0);
     let result: Value = serde_json::from_str(stdout.trim()).unwrap();
     assert!(result["context"]
         .as_str()
         .unwrap()
         .contains("Resume task 42"));
-    let (code, stdout) = invoke(&payload(false), &home);
+    let (code, stdout) = invoke(&payload("session-456", false), &home);
     assert_eq!(code, 0);
     assert!(stdout.is_empty());
     let _ = std::fs::remove_dir_all(home);
@@ -73,7 +84,7 @@ fn injects_last_session_summary_only_on_first_turn() {
 fn prompt_hook_fails_open_without_matching_rules_or_summary() {
     let home = std::env::temp_dir().join(format!("foundation-prompt-empty-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
-    let payload = serde_json::json!({"cwd":home,"hook_event_name":"pre_llm_call","user_message":"hello","is_first_turn":true}).to_string();
+    let payload = serde_json::json!({"cwd":home,"hook_event_name":"pre_llm_call","user_message":"hello","session_id":"first-session","is_first_turn":true}).to_string();
     let (code, stdout) = invoke(&payload, &home);
     let _ = std::fs::remove_dir_all(&home);
     assert_eq!(code, 0);
