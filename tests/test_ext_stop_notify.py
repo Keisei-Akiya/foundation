@@ -3,14 +3,45 @@ from __future__ import annotations
 import json
 import shutil
 import socket
+import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from adapters.hermes.plugin.hooks_ext import stop_desktop_notify
 from hermes_runtime import BINARY_PATH, IsolatedHermesHome, hermes_runtime_available, invoke_hook
 
 pytestmark = pytest.mark.skipif(not hermes_runtime_available(), reason="Hermes source is unavailable")
+
+
+def test_turn_correlation_requires_ids_and_keeps_parallel_turns_separate(monkeypatch):
+    hooks = {}
+    calls = []
+
+    class Context:
+        def register_hook(self, event, callback):
+            hooks[event] = callback
+
+    core = type("Core", (), {
+        "run_subcommand": staticmethod(lambda command, payload, timeout=None: calls.append(payload))
+    })()
+    stop_desktop_notify.register(Context(), core)
+    start = hooks["pre_llm_call"]
+    finish = hooks["post_llm_call"]
+
+    # A session ID by itself is not unique across turns and must not be correlated.
+    start(session_id="same-session")
+    finish(session_id="same-session")
+
+    # Separate concurrent turns complete in the reverse order without cross-pairing.
+    start(session_id="same-session", turn_id="turn-a")
+    start(session_id="same-session", turn_id="turn-b")
+    finish(session_id="same-session", turn_id="turn-b")
+    finish(session_id="same-session", turn_id="turn-a")
+    assert len(calls) == 2
 
 
 def test_real_hermes_long_turn_notification_uses_loopback_and_excludes_private_context(monkeypatch):
