@@ -51,7 +51,7 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
             {"role": "user", "content": f"private prompt {i} /home/private export TOKEN=secret cargo test"}
             for i in range(10)
         ]
-        history.append({"role": "assistant", "tool_name": "todo", "todos": [{"status": "pending", "content": "private todo"}]})
+        history.append({"role": "assistant", "tool_name": "todo", "todos": [{"status": "pending", "content": "private todo"}, {"status": "completed", "content": "private completed todo"}]})
         invoke_hook(
             "post_llm_call",
             session_id="runtime-stop-session-test",
@@ -85,9 +85,9 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
         summary = json.loads(summary_text.splitlines()[0])
         assert summary["event"] == "stop:session-end"
         assert summary["session_id"] == "runtime-stop-session-test"
-        assert "Purpose:" in summary["summary"]
-        assert "Progress:" in summary["summary"]
-        assert "Unfinished: 1 of 1" in summary["summary"]
+        assert "Purpose: Testing and verification." in summary["summary"]
+        assert "Progress: 1/2 structured tasks completed; 1 tool operations recorded." in summary["summary"]
+        assert "Unfinished: 1 structured tasks remain open." in summary["summary"]
         for forbidden in ("private prompt", "private response", "private todo", "/home/", "TOKEN=secret", "cargo test"):
             assert forbidden not in summary_text
 
@@ -103,7 +103,7 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
         assert any(
             isinstance(result, dict)
             and "Purpose:" in result.get("context", "")
-            and "Unfinished: 1 of 1" in result.get("context", "")
+            and "Unfinished: 1 structured tasks remain open." in result.get("context", "")
             for result in second_turn_results
         )
 

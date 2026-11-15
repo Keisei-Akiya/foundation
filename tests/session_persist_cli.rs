@@ -40,7 +40,7 @@ fn history(user_count: usize) -> Vec<Value> {
 #[test]
 fn session_end_persists_only_minimal_summary_metadata_on_post_llm_call() {
     let home = temp_home("session-summary");
-    let payload = json!({"hook_event_name":"post_llm_call", "session_id":"session-123", "conversation_history":history(2), "assistant_response":"private response", "model":"m", "platform":"cli"});
+    let payload = json!({"hook_event_name":"post_llm_call", "session_id":"session-123", "conversation_history":[{"role":"user","content":"Implement feature /home/private TOKEN=secret run cargo test"},{"type":"tool_result","tool_name":"todo","todos":[{"status":"pending","content":"private todo"},{"status":"completed","content":"private completed todo"}]}], "assistant_response":"private response", "model":"m", "platform":"cli"});
     let (code, stdout) = run("session-end", &payload, &home);
     assert_eq!(code, 0);
     assert!(stdout.is_empty());
@@ -48,10 +48,23 @@ fn session_end_persists_only_minimal_summary_metadata_on_post_llm_call() {
     let text = std::fs::read_to_string(path).unwrap();
     let record: Value = serde_json::from_str(text.trim()).unwrap();
     assert_eq!(record["session_id"], "session-123");
-    assert!(record["summary"].as_str().unwrap().contains("Purpose:"));
-    assert!(record["summary"].as_str().unwrap().contains("Progress:"));
-    assert!(record["summary"].as_str().unwrap().contains("Unfinished:"));
-    assert!(!text.contains("private prompt") && !text.contains("private response"));
+    assert!(record["summary"]
+        .as_str()
+        .unwrap()
+        .contains("Purpose: Software implementation."));
+    assert!(record["summary"]
+        .as_str()
+        .unwrap()
+        .contains("Progress: 1/2 structured tasks completed"));
+    assert!(record["summary"]
+        .as_str()
+        .unwrap()
+        .contains("Unfinished: 1 structured tasks remain open."));
+    assert!(!text.contains("Implement feature") && !text.contains("private todo"));
+    assert!(
+        !text.contains("/home/") && !text.contains("TOKEN=secret") && !text.contains("cargo test")
+    );
+    assert!(!text.contains("private response"));
     let _ = std::fs::remove_dir_all(home);
 }
 
