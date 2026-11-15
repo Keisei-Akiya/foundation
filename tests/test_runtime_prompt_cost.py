@@ -107,6 +107,19 @@ def test_real_hermes_session_start_dispatches_lockfile_detection(live_foundation
 
 def test_real_hermes_cost_hooks_persist_usage_and_session_total(live_foundation):
     runtime, trace = live_foundation
+    pricing = runtime.home / "plugin-data/foundation/model-pricing.json"
+    pricing.parent.mkdir(parents=True, exist_ok=True)
+    pricing.write_text(
+        json.dumps({
+            "model-x": {
+                "input_usd_per_million": 2.0,
+                "output_usd_per_million": 8.0,
+                "cache_write_usd_per_million": 10.0,
+                "cache_read_usd_per_million": 0.5,
+            }
+        }),
+        encoding="utf-8",
+    )
 
     invoke_hook(
         "post_api_request",
@@ -134,9 +147,9 @@ def test_real_hermes_cost_hooks_persist_usage_and_session_total(live_foundation)
     assert totals[0]["output_tokens"] == 4
     assert totals[0]["cache_write_tokens"] == 2
     assert totals[0]["cache_read_tokens"] == 3
-    assert totals[0]["cost_status"] == "unavailable"
-    assert totals[0]["cost_unavailable_reason"] == "unknown_model_price"
-    assert "estimated_cost_usd" not in totals[0]
+    assert totals[0]["cost_status"] == "calculated"
+    assert totals[0]["estimated_cost_usd"] == 0.0000735
+    assert totals[0]["models"] == ["model-x"]
     report = subprocess.run(
         [str(runtime.bin / "foundation"), "cost-report"],
         check=True,
@@ -145,8 +158,9 @@ def test_real_hermes_cost_hooks_persist_usage_and_session_total(live_foundation)
         env=os.environ.copy(),
     )
     assert "runtime-cost-test" in report.stdout
-    assert "unavailable" in report.stdout
-    assert "No configured price for this model" in report.stdout
+    assert "model-x" in report.stdout
+    assert "$0.00007350" in report.stdout
+    assert "unavailable" not in report.stdout
     assert "must not be persisted" not in path.read_text(encoding="utf-8")
     assert "must not be persisted" not in report.stdout
 

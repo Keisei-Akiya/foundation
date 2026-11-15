@@ -218,6 +218,54 @@ fn cost_report_explains_when_a_session_price_is_unknown() {
 }
 
 #[test]
+fn cost_report_identifies_sessions_aggregated_from_multiple_models() {
+    let home = std::env::temp_dir().join(format!(
+        "foundation-cost-report-multi-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join("plugin-data/foundation")).unwrap();
+    std::fs::write(
+        home.join("plugin-data/foundation/cost_tracker.jsonl"),
+        "{\"kind\":\"session_total\",\"session_id\":\"s-multi\",\"model\":\"model-a\",\"models\":[\"model-a\",\"model-b\"],\"input_tokens\":15,\"output_tokens\":5,\"cost_status\":\"calculated\",\"estimated_cost_usd\":0.0000825}\n",
+    ).unwrap();
+
+    let (code, stdout, stderr) = invoke("cost-report", "", &home);
+
+    assert_eq!(code, 0);
+    assert!(stderr.is_empty());
+    assert!(
+        stdout.contains("multiple models: model-a, model-b"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("$0.00008250"));
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
+fn cost_report_marks_incomplete_totals_instead_of_showing_zero_tokens() {
+    let home = std::env::temp_dir().join(format!(
+        "foundation-cost-report-incomplete-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join("plugin-data/foundation")).unwrap();
+    std::fs::write(
+        home.join("plugin-data/foundation/cost_tracker.jsonl"),
+        "{\"kind\":\"session_total\",\"session_id\":\"s-broken\",\"cost_status\":\"unavailable\"}\n",
+    ).unwrap();
+
+    let (code, stdout, stderr) = invoke("cost-report", "", &home);
+
+    assert_eq!(code, 0);
+    assert!(stderr.is_empty());
+    assert!(stdout.contains("invalid/incomplete record"), "{stdout}");
+    assert!(!stdout.contains("s-broken\tunknown\t0\t0"), "{stdout}");
+    assert!(!stdout.contains("$0.00000000"));
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
 fn desktop_notify_is_noop_on_linux_and_ignores_conversation_content() {
     let home = std::env::temp_dir().join(format!("foundation-notify-{}", std::process::id()));
     let payload = r#"{"hook_event_name":"post_llm_call","session_id":"s1","assistant_response":"private text"}"#;

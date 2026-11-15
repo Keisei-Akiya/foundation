@@ -56,28 +56,57 @@ pub fn report() {
     }
     println!("Session\tModel\tInput tokens\tOutput tokens\tEstimated cost (USD)");
     for (session, row) in totals {
-        let model = row
-            .get("model")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown");
-        let input = count(&row, "input_tokens");
-        let output = count(&row, "output_tokens");
-        match row.get("cost_status").and_then(Value::as_str) {
-            Some("calculated") => {
-                let cost = row
-                    .get("estimated_cost_usd")
-                    .and_then(Value::as_f64)
-                    .unwrap_or(0.0);
+        let Some(input) = row.get("input_tokens").and_then(Value::as_u64) else {
+            println!("{session}\tinvalid/incomplete record (missing input token count)");
+            continue;
+        };
+        let Some(output) = row.get("output_tokens").and_then(Value::as_u64) else {
+            println!("{session}\tinvalid/incomplete record (missing output token count)");
+            continue;
+        };
+        let Some(status) = row.get("cost_status").and_then(Value::as_str) else {
+            println!("{session}\tinvalid/incomplete record (missing cost status)");
+            continue;
+        };
+        let models: Vec<&str> = row
+            .get("models")
+            .and_then(Value::as_array)
+            .map(|items| items.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        let model = if models.len() > 1 {
+            format!("multiple models: {}", models.join(", "))
+        } else {
+            row.get("model")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_owned()
+        };
+        match status {
+            "calculated" => {
+                let Some(cost) = row.get("estimated_cost_usd").and_then(Value::as_f64) else {
+                    println!("{session}\tinvalid/incomplete record (missing estimated cost)");
+                    continue;
+                };
+                if !cost.is_finite() || cost < 0.0 {
+                    println!("{session}\tinvalid/incomplete record (invalid estimated cost)");
+                    continue;
+                }
                 println!("{session}\t{model}\t{input}\t{output}\t${cost:.8}");
             }
-            _ => {
-                let reason = match row.get("cost_unavailable_reason").and_then(Value::as_str) {
-                    Some("unknown_cache_price") => "No configured cache price for this model",
-                    Some("unknown_model_price") => "No configured price for this model",
+            "unavailable" => {
+                let Some(reason) = row.get("cost_unavailable_reason").and_then(Value::as_str)
+                else {
+                    println!("{session}\tinvalid/incomplete record (missing unavailable reason)");
+                    continue;
+                };
+                let reason = match reason {
+                    "unknown_cache_price" => "No configured cache price for this model",
+                    "unknown_model_price" => "No configured price for this model",
                     _ => "Price unavailable (check model-pricing.json)",
                 };
                 println!("{session}\t{model}\t{input}\t{output}\tunavailable: {reason}");
             }
+            _ => println!("{session}\tinvalid/incomplete record (unknown cost status)"),
         }
     }
 }
@@ -126,6 +155,7 @@ pub fn run(payload: &Value) {
         });
         let (mut input, mut output, mut cache_write, mut cache_read) = (0u64, 0u64, 0u64, 0u64);
         let mut model = "unknown";
+        let mut models = std::collections::BTreeSet::new();
         let mut cost = 0.0_f64;
         let mut unavailable_reason = None;
         let prices = std::fs::read(store.root().join("model-pricing.json"))
@@ -141,6 +171,7 @@ pub fn run(payload: &Value) {
             cache_read += count(row, "cache_read_tokens");
             if let Some(m) = row.get("model").and_then(Value::as_str) {
                 model = m;
+                models.insert(m);
             }
             let rates = row
                 .get("model")
@@ -180,7 +211,7 @@ pub fn run(payload: &Value) {
         };
         let mut total = json!({
             "kind":"session_total", "session_id":session, "model":model,
-            "input_tokens":input, "output_tokens":output,
+            "models":models, "input_tokens":input, "output_tokens":output,
             "cache_write_tokens":cache_write, "cache_read_tokens":cache_read
         });
         if let (Some(object), Some(fields)) = (total.as_object_mut(), cost_fields.as_object()) {

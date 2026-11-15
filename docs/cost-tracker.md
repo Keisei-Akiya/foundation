@@ -12,7 +12,7 @@ After sessions have completed, run:
 foundation cost-report
 ```
 
-It prints the latest total per session: session token, response model, input/output token counts, and estimated USD cost. If pricing is missing, it prints `unavailable` with a reason. The report reads only session totals; prompts, assistant replies, and tool content are neither stored by this hook nor emitted by the report. An empty or unavailable data store prints `No session cost records yet.`
+It prints the latest total per session: session token, contributing model(s), input/output token counts, and estimated USD cost. Sessions using more than one model list all contributing models (the total itself is still one session-wide aggregate). If a stored session total is missing required fields, it is marked `invalid/incomplete record` rather than rendered as zero tokens. If pricing is missing, it prints `unavailable` with a reason. The report reads only session totals; prompts, assistant replies, and tool content are neither stored by this hook nor emitted by the report. An empty or unavailable data store prints `No session cost records yet.`
 
 ## Configure model rates
 
