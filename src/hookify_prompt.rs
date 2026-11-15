@@ -4,6 +4,9 @@ use std::path::Path;
 
 const MAX_PROMPT_BYTES: usize = 256 * 1024;
 const MAX_RULE_BYTES: u64 = 64 * 1024;
+const MAX_RULE_PATTERN_BYTES: usize = 512;
+const MAX_RULE_FILES: usize = 128;
+const MAX_DIRECTORY_ENTRIES: usize = 1024;
 
 struct Rule {
     name: String,
@@ -77,7 +80,7 @@ fn parse_rule(path: &Path) -> Option<Rule> {
         return None;
     }
     let pattern = values.get("pattern")?.as_str();
-    if pattern.is_empty() || pattern.len() > 4096 {
+    if pattern.is_empty() || pattern.len() > MAX_RULE_PATTERN_BYTES {
         return None;
     }
     let name = values
@@ -113,6 +116,7 @@ pub(super) fn evaluate(cwd: &str, prompt: &str) -> (Vec<String>, Option<String>)
         return (Vec::new(), None);
     };
     let mut paths: Vec<_> = entries
+        .take(MAX_DIRECTORY_ENTRIES)
         .flatten()
         .map(|entry| entry.path())
         .filter(|path| {
@@ -124,6 +128,7 @@ pub(super) fn evaluate(cwd: &str, prompt: &str) -> (Vec<String>, Option<String>)
         })
         .collect();
     paths.sort();
+    paths.truncate(MAX_RULE_FILES);
 
     let mut contexts = Vec::new();
     for path in paths {
@@ -140,6 +145,8 @@ pub(super) fn evaluate(cwd: &str, prompt: &str) -> (Vec<String>, Option<String>)
         }
         let Ok(regex) = regex::RegexBuilder::new(&rule.pattern)
             .case_insensitive(true)
+            .size_limit(1024 * 1024)
+            .dfa_size_limit(1024 * 1024)
             .build()
         else {
             continue;

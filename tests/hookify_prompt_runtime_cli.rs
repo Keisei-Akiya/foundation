@@ -104,6 +104,21 @@ fn hookify_prompt_defaults_to_warn_action() {
 }
 
 #[test]
+fn oversized_hookify_prompt_pattern_fails_open() {
+    let root = project();
+    let pattern = "a".repeat(513);
+    std::fs::write(
+        root.join(".claude/hookify.oversized.local.md"),
+        format!("---\nevent: prompt\naction: block\npattern: {pattern}\n---\nlarge rule\n"),
+    )
+    .unwrap();
+
+    let result = invoke(&root, &pattern);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(result.is_null());
+}
+
+#[test]
 fn missing_hookify_prompt_rules_fail_open() {
     let root = project();
     let result = invoke(&root, "ordinary prompt");
