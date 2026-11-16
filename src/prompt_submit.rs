@@ -45,6 +45,9 @@ pub fn run(payload: &Value) {
         .unwrap_or(false)
         || payload.get("turn_index").and_then(Value::as_u64) == Some(0);
     if first_turn {
+        if let Some(notice) = crate::session_marker::previous_session_notice(payload) {
+            contexts.push(notice.to_string());
+        }
         if let Some(session_id) = field(payload, "session_id") {
             if let Some(summary) = latest_summary(session_id) {
                 contexts.push(format!(

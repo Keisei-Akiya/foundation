@@ -213,19 +213,47 @@ fn session_finalize_writes_private_marker_with_boundary_metadata() {
 }
 
 #[test]
+fn session_end_persists_interruption_metadata_and_session_start_is_marked() {
+    let home =
+        std::env::temp_dir().join(format!("foundation-session-events-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    for payload in [
+        serde_json::json!({"hook_event_name":"on_session_start","session_id":"s-1"}),
+        serde_json::json!({"hook_event_name":"on_session_end","session_id":"s-1","completed":false,"interrupted":true,"turn_exit_reason":"keyboard_interrupt"}),
+    ] {
+        let (code, stdout, _) = invoke_with_env(&["session-hooks"], &payload.to_string(), &home);
+        assert_eq!(code, 0);
+        assert!(stdout.is_empty());
+    }
+    let marker = home.join("plugin-data/ecc-hooks/session-markers.jsonl");
+    let rows: Vec<Value> = std::fs::read_to_string(marker)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(rows[0]["event"], "session:start:marker");
+    assert_eq!(rows[1]["event"], "session:turn:end");
+    assert_eq!(rows[1]["interrupted"], true);
+    assert_eq!(rows[1]["turn_exit_reason"], "keyboard_interrupt");
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
 fn session_start_detects_project_lockfile_without_emitting_hook_output() {
     let root =
         std::env::temp_dir().join(format!("foundation-session-start-{}", std::process::id()));
+    let home = root.join("hermes-home");
+    let project = root.join("project");
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).unwrap();
-    std::fs::write(root.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'\n").unwrap();
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::write(project.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'\n").unwrap();
     let payload = serde_json::json!({
         "hook_event_name": "on_session_start",
-        "cwd": root,
+        "cwd": project,
         "session_id": "session-456"
     })
     .to_string();
-    let (code, stdout, stderr) = invoke(&["session-hooks"], &payload);
+    let (code, stdout, stderr) = invoke_with_env(&["session-hooks"], &payload, &home);
     assert_eq!(code, 0);
     assert!(stdout.is_empty());
     assert!(stderr.contains("\"manager\":\"pnpm\""));

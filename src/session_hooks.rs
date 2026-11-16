@@ -9,8 +9,12 @@ pub fn run(payload: &Value) {
         return;
     };
     match event {
-        "on_session_start" => session_start(payload),
-        "on_session_finalize" => session_end_marker(payload),
+        "on_session_start" => {
+            session_start(payload);
+            append_marker(payload, "session:start:marker");
+        }
+        "on_session_end" => append_marker(payload, "session:turn:end"),
+        "on_session_finalize" => append_marker(payload, "session:end:marker"),
         _ => {}
     }
 }
@@ -49,7 +53,7 @@ fn session_start(payload: &Value) {
     // detection and does not pretend to inject context.
 }
 
-fn session_end_marker(payload: &Value) {
+fn append_marker(payload: &Value, event: &str) {
     let Ok(home) = std::env::var("HERMES_HOME") else {
         return;
     };
@@ -62,12 +66,21 @@ fn session_end_marker(payload: &Value) {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
     }
-    let record = json!({
-        "event": "session:end:marker",
+    let mut record = json!({
+        "event": event,
         "session_id": payload.get("session_id").and_then(Value::as_str).unwrap_or(""),
-        "platform": payload.get("platform").and_then(Value::as_str).unwrap_or(""),
-        "reason": payload.get("reason").and_then(Value::as_str).unwrap_or(""),
     });
+    for field in [
+        "platform",
+        "reason",
+        "completed",
+        "interrupted",
+        "turn_exit_reason",
+    ] {
+        if let Some(value) = payload.get(field) {
+            record[field] = value.clone();
+        }
+    }
     let mut options = std::fs::OpenOptions::new();
     options.create(true).append(true);
     #[cfg(unix)]

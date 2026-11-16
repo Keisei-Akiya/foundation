@@ -161,6 +161,7 @@ mod preflight;
 mod prompt_submit;
 mod session_end;
 mod session_hooks;
+mod session_marker;
 #[allow(dead_code)] // Public API for forthcoming stateful hooks; current hooks retain legacy paths.
 mod state;
 mod stop_hookify;
