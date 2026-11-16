@@ -4,7 +4,7 @@ use std::process::{Command, Stdio};
 
 fn invoke(args: &[&str], input: &str) -> (i32, String, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_foundation"))
-        .env_remove("ECC_HERMES_SKILL_TRACK")
+        .env_remove("FOUNDATION_SKILL_TRACK")
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -27,7 +27,7 @@ fn invoke(args: &[&str], input: &str) -> (i32, String, String) {
 
 fn invoke_with_env(args: &[&str], input: &str, home: &std::path::Path) -> (i32, String, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_foundation"))
-        .env("ECC_HERMES_SKILL_TRACK", "1")
+        .env("FOUNDATION_SKILL_TRACK", "1")
         .env("HERMES_HOME", home)
         .args(args)
         .stdin(Stdio::piped())
@@ -63,7 +63,7 @@ fn preflight_emits_hermes_block_action_for_literal_no_verify() {
 
 #[test]
 fn hookify_blocks_matching_project_bash_rule() {
-    let root = std::env::temp_dir().join(format!("ecc-hookify-test-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("foundation-hookify-test-{}", std::process::id()));
     let rules = root.join(".claude");
     std::fs::create_dir_all(&rules).unwrap();
     std::fs::write(
@@ -84,7 +84,8 @@ fn hookify_blocks_matching_project_bash_rule() {
 
 #[test]
 fn hookify_ignores_non_matching_rule() {
-    let root = std::env::temp_dir().join(format!("ecc-hookify-clean-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("foundation-hookify-clean-{}", std::process::id()));
     let rules = root.join(".claude");
     std::fs::create_dir_all(&rules).unwrap();
     std::fs::write(

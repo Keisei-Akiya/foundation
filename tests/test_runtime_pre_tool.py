@@ -115,8 +115,8 @@ def test_pre_tool_call_dispatches_continuous_learning_observer_through_hermes():
 def test_pre_tool_call_dispatches_governance_capture_opt_in_through_hermes():
     with IsolatedHermesHome(enable_foundation=True) as runtime:
         _install_binary(runtime)
-        previous = os.environ.get("ECC_GOVERNANCE_CAPTURE")
-        os.environ["ECC_GOVERNANCE_CAPTURE"] = "1"
+        previous = os.environ.get("FOUNDATION_GOVERNANCE_CAPTURE")
+        os.environ["FOUNDATION_GOVERNANCE_CAPTURE"] = "1"
         try:
             # Governance capture is best-effort stderr telemetry; exercise its opted-in
             # classification via the actual Hermes callback, and assert it does not block.
@@ -128,9 +128,9 @@ def test_pre_tool_call_dispatches_governance_capture_opt_in_through_hermes():
             )
         finally:
             if previous is None:
-                os.environ.pop("ECC_GOVERNANCE_CAPTURE", None)
+                os.environ.pop("FOUNDATION_GOVERNANCE_CAPTURE", None)
             else:
-                os.environ["ECC_GOVERNANCE_CAPTURE"] = previous
+                os.environ["FOUNDATION_GOVERNANCE_CAPTURE"] = previous
 
         assert not any(
             isinstance(result, dict) and result.get("action") == "block" for result in results

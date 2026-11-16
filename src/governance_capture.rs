@@ -41,7 +41,11 @@ fn sensitive_path(path: &str) -> bool {
 }
 
 pub fn run(payload: &Value) {
-    if std::env::var("ECC_GOVERNANCE_CAPTURE").ok().as_deref() != Some("1") {
+    if std::env::var("FOUNDATION_GOVERNANCE_CAPTURE")
+        .ok()
+        .as_deref()
+        != Some("1")
+    {
         return;
     }
     let Some(tool) = payload.get("tool_name").and_then(Value::as_str) else {

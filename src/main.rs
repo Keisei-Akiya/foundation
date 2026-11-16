@@ -48,7 +48,7 @@ const EDIT_TOOLS: &[&str] = &[
 const MAX_STDIN: usize = 1_048_576;
 
 fn warn(message: &str) {
-    eprintln!("[ecc-config-protection] {message}")
+    eprintln!("[foundation-config-protection] {message}")
 }
 fn as_nonempty_string(value: Option<&Value>) -> Option<&str> {
     value

@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 fn invoke(args: &[&str], input: &str, home: &std::path::Path) -> (i32, String, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_foundation"))
         .env("HERMES_HOME", home)
-        .env("ECC_HERMES_SKILL_TRACK", "1")
+        .env("FOUNDATION_SKILL_TRACK", "1")
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

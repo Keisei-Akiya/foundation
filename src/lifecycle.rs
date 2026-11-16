@@ -5,7 +5,7 @@ use std::path::Path;
 use super::valid_id;
 
 pub fn lifecycle(payload: &Value) {
-    if std::env::var("ECC_HERMES_SKILL_TRACK").ok().as_deref() != Some("1") {
+    if std::env::var("FOUNDATION_SKILL_TRACK").ok().as_deref() != Some("1") {
         return;
     }
     let Some(p) = payload.as_object() else {

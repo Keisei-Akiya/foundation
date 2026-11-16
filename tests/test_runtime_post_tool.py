@@ -103,7 +103,7 @@ def test_post_dispatcher_sync_dispatches_observer_and_lifecycle_via_hermes():
 
 
 def test_skill_track_persists_failed_skill_run_via_hermes(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("ECC_HERMES_SKILL_TRACK", "1")
+    monkeypatch.setenv("FOUNDATION_SKILL_TRACK", "1")
     with IsolatedHermesHome(enable_foundation=True) as runtime:
         _install_logging_binary(runtime)
         _reload_plugins()
@@ -155,7 +155,7 @@ def test_async_post_tool_is_nonblocking_and_persists_skill_run(monkeypatch: pyte
         )
         wrapper.write_text(wrapper.read_text(encoding="utf-8").replace("import sys, time", "import os, sys, time"), encoding="utf-8")
         wrapper.chmod(0o755)
-        monkeypatch.setenv("ECC_HERMES_SKILL_TRACK", "1")
+        monkeypatch.setenv("FOUNDATION_SKILL_TRACK", "1")
         _reload_plugins()
 
         runs = runtime.home / "plugin-data/foundation/skill-runs.jsonl"
