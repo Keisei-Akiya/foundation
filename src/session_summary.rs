@@ -121,6 +121,111 @@ fn tool_operation_count(history: &[Value]) -> usize {
         .count()
 }
 
+fn contains_secret_or_command(text: &str) -> bool {
+    // Best-effort filtering only; summaries are local, but this is not a secret scanner.
+    let lower = text.to_ascii_lowercase();
+    if [
+        "authorization: bearer",
+        "bearer ",
+        "token",
+        "password",
+        "secret",
+        "key=",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+        || text.starts_with('$')
+        || text.contains(['|', '`', ';'])
+        || text.contains("&&")
+        || text.contains("$(")
+        || text.contains("```")
+    {
+        return true;
+    }
+
+    for token in text.split_whitespace() {
+        let trimmed =
+            token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
+        let lower_token = trimmed.to_ascii_lowercase();
+        if lower_token.starts_with("sk-") && trimmed.len() >= 20 {
+            return true;
+        }
+        if trimmed.len() >= 40 {
+            let unique = trimmed
+                .chars()
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+            if unique >= 12 {
+                return true;
+            }
+        }
+    }
+    if text.contains("://") {
+        let authority = text
+            .split_once("://")
+            .map(|(_, rest)| rest.split('/').next().unwrap_or_default())
+            .unwrap_or_default();
+        if authority.contains('@') {
+            return true;
+        }
+    }
+    false
+}
+
+fn contains_path(text: &str) -> bool {
+    for token in text.split_whitespace() {
+        let token = token.trim_matches(|c: char| matches!(c, '"' | '\'' | '(' | ')' | ','));
+        if token.starts_with('/')
+            || token.starts_with("~/")
+            || token.starts_with("./")
+            || token.starts_with("../")
+            || (token.len() >= 3
+                && token.as_bytes().get(1) == Some(&b':')
+                && token
+                    .as_bytes()
+                    .get(2)
+                    .is_some_and(|b| *b == b'\\' || *b == b'/'))
+            || token.matches('/').count() >= 2
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn safe_item(text: &str) -> bool {
+    !contains_secret_or_command(text) && !contains_path(text)
+}
+
+fn retained_work_items(history: &[Value]) -> Vec<&str> {
+    let mut items = Vec::new();
+    for entry in history {
+        let is_user = entry.get("role").and_then(Value::as_str) == Some("user")
+            || entry.get("type").and_then(Value::as_str) == Some("user");
+        if is_user {
+            if let Some(content) = entry.get("content").and_then(Value::as_str) {
+                if safe_item(content) && !content.trim().is_empty() {
+                    items.push(content.trim());
+                }
+            }
+        }
+        if let Some(todo_items) = entry
+            .get("todos")
+            .or_else(|| entry.get("todo_list"))
+            .and_then(Value::as_array)
+        {
+            for todo in todo_items {
+                if let Some(content) = todo.get("content").and_then(Value::as_str) {
+                    if safe_item(content) && !content.trim().is_empty() {
+                        items.push(content.trim());
+                    }
+                }
+            }
+        }
+    }
+    items
+}
+
 pub(super) fn build(history: &[Value]) -> String {
     let todos = history
         .iter()
@@ -142,8 +247,17 @@ pub(super) fn build(history: &[Value]) -> String {
     } else {
         "No structured unfinished-task state was captured.".to_string()
     };
+    let work = retained_work_items(history);
+    let work = if work.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\nWork: {}",
+            work.iter().take(3).copied().collect::<Vec<_>>().join("; ")
+        )
+    };
     let summary = format!(
-        "Purpose: {}.\nProgress: {progress}\nUnfinished: {unfinished}",
+        "Purpose: {}.\nProgress: {progress}\nUnfinished: {unfinished}{work}",
         purpose(history)
     );
     if summary.len() <= MAX_SUMMARY_BYTES {
@@ -163,7 +277,7 @@ mod tests {
         let history = vec![
             json!({"role":"user","content":"Implement the requested feature /home/rocky/project export TOKEN=secret run cargo test"}),
             json!({"role":"assistant","content":"private response"}),
-            json!({"type":"tool_result","tool_name":"todo","todos":[{"status":"pending","content":"secret path /home/private"},{"status":"completed","content":"done"}]}),
+            json!({"type":"tool_result","tool_name":"todo","todos":[{"status":"pending","content":"secret path /home/private"},{"status":"completed","content":"done /home/done"}]}),
         ];
         let summary = build(&history);
         assert!(summary.contains("Purpose: Software implementation."));

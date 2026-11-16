@@ -27,7 +27,7 @@ pub fn run(payload: &Value) {
         "summary": summary,
     });
     if let Ok(store) = StateStore::from_env() {
-        if store.is_opted_in("session-summary", true).unwrap_or(false) {
+        if store.is_opted_in("session-summary", false).unwrap_or(false) {
             let _ = store.append("session-summary", &record);
         }
     }
