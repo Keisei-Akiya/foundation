@@ -283,12 +283,11 @@ def search(question, wiki, threshold, max_results, domain_threshold=DEFAULT_DOMA
                           if not page["domains"] or selected_names.intersection(page["domains"])]
     if not candidates:
         raise ValueError(f"no wiki pages found in selected domains for {wiki}")
-    scored_all = []
-    for start in range(0, len(pages), BATCH_SIZE):
-        batch = pages[start:start + BATCH_SIZE]
-        scored_all.extend((score, page) for score, page in zip(score_batch(question, batch, usage), batch))
-    candidate_paths = {page["path"] for page in candidates}
-    scored = [(score, page) for score, page in scored_all if page["path"] in candidate_paths]
+    scored = []
+    for start in range(0, len(candidates), BATCH_SIZE):
+        batch = candidates[start:start + BATCH_SIZE]
+        scored.extend((score, page) for score, page in zip(score_batch(question, batch, usage), batch))
+    scores_by_path = {page["path"]: score for score, page in scored}
     selected = [item for item in scored if item[0] >= threshold]
     if not selected:
         selected = [max(scored, key=lambda item: item[0])]
@@ -299,7 +298,7 @@ def search(question, wiki, threshold, max_results, domain_threshold=DEFAULT_DOMA
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "question": question,
             "domain_probabilities": domain_probabilities,
-            "page_scores": {page["path"]: score for score, page in scored_all},
+            "page_scores": {page["path"]: scores_by_path.get(page["path"]) for page in pages},
             "returned_pages": [page["path"] for _, page in results],
             "jev_usage": usage,
         }

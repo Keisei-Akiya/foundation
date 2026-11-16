@@ -218,9 +218,9 @@ class WikiSearchCliTests(unittest.TestCase):
                          ["domain:engineering", "domain:home"])
         self.assertIn("Engineering domain description", json.dumps(calls[0], ensure_ascii=False))
         self.assertEqual([q["name"] for q in calls[1]["questions"]],
-                         ["page:concepts/engineering.md", "page:concepts/home.md"])
+                         ["page:concepts/engineering.md"])
 
-    def test_domains_score_every_page_and_only_send_allowed_metadata(self):
+    def test_domains_score_candidates_only_and_only_send_allowed_metadata(self):
         self.add_schema([
             ("engineering", "Engineering description"),
             ("home", "Home description"),
@@ -238,7 +238,7 @@ class WikiSearchCliTests(unittest.TestCase):
             "- [[b_home]] — Home summary\n- [[c_mgmt]] — Management summary\n"
             "- [[d_plain]] — Plain summary\n", encoding="utf-8")
         proc = self.run_search([[0.8, 0.6, 0.1], [(0.1, 0.5), (0.2, 0.4),
-                                                 (0.3, 0.5), (0.4, 0.6)]],
+                                                 (0.4, 0.6)]],
                                "--domain-threshold", "0.5", "--max-domains", "2",
                                "--threshold", "0.6", "--max-results", "1")
         calls = self.read_calls()
@@ -250,13 +250,13 @@ class WikiSearchCliTests(unittest.TestCase):
                             for q in domain_questions))
         self.assertEqual([q["name"] for q in calls[1]["questions"]],
                          ["page:concepts/a_eng.md", "page:concepts/b_home.md",
-                          "page:concepts/c_mgmt.md", "page:concepts/d_plain.md"])
+                          "page:concepts/d_plain.md"])
         self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
         serialized = json.dumps(calls, ensure_ascii=False)
         self.assertIn("Engineering description", serialized)
         self.assertIn("Home description", serialized)
         self.assertIn("Engineering summary", serialized)
-        self.assertIn("Management summary", serialized)
+        self.assertNotIn("Management summary", serialized)
         self.assertNotIn("PRIVATE", serialized)
         self.assertNotIn("none", json.dumps(domain_questions, ensure_ascii=False).lower())
 
@@ -281,13 +281,12 @@ class WikiSearchCliTests(unittest.TestCase):
         self.add_page("a_eng", "Engineering", "body", "[engineering]")
         self.add_page("b_home", "Home", "body", "[home]")
         self.add_page("c_plain", "Plain", "body", "")
-        proc = self.run_search([[0.2, 0.7, 0.9], [(0.4, 0.4), (0.1, 0.8), (0.4, 0.3)]],
+        proc = self.run_search([[0.2, 0.7, 0.9], [(0.1, 0.8), (0.4, 0.3)]],
                                "--domain-threshold", "0.95", "--max-domains", "1",
                                "--threshold", "0.8", "--max-results", "5")
         calls = self.read_calls()
         self.assertEqual([q["name"] for q in calls[1]["questions"]],
-                         ["page:concepts/a_eng.md", "page:concepts/b_home.md",
-                          "page:concepts/c_plain.md"])
+                         ["page:concepts/b_home.md", "page:concepts/c_plain.md"])
         self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
         self.assertTrue(proc.stdout.strip().endswith("concepts/b_home.md\tHome"))
 
@@ -305,8 +304,7 @@ class WikiSearchCliTests(unittest.TestCase):
                 "domain:home": {"legend": {"0":"no","1":"yes"}, "probabilities":{"0":0.7,"1":0.3}}},
              "usage": {"input_tokens": 12, "output_tokens": 3}},
             {"answers": {
-                "page:concepts/a_eng.md": {"legend":{"0":"none","1":"low","2":"high"}, "probabilities":{"0":0.1,"1":0.2,"2":0.7}},
-                "page:concepts/b_home.md": {"legend":{"0":"none","1":"low","2":"high"}, "probabilities":{"0":0.8,"1":0.1,"2":0.1}}},
+                "page:concepts/a_eng.md": {"legend":{"0":"none","1":"low","2":"high"}, "probabilities":{"0":0.1,"1":0.2,"2":0.7}}},
              "usage": {"input_tokens": 20, "output_tokens": 4}}
         ])
         proc = subprocess.run(["python3", "-I", str(SCRIPT), "--wiki", str(self.wiki),
@@ -321,7 +319,11 @@ class WikiSearchCliTests(unittest.TestCase):
         self.assertEqual(set(record["domain_probabilities"]), {"engineering", "home"})
         self.assertEqual(record["domain_probabilities"]["home"], 0.3)
         self.assertEqual(set(record["page_scores"]), {"concepts/a_eng.md", "concepts/b_home.md"})
-        self.assertEqual(record["page_scores"]["concepts/b_home.md"], 0.2)
+        self.assertAlmostEqual(record["page_scores"]["concepts/a_eng.md"], 0.9)
+        self.assertIsNone(record["page_scores"]["concepts/b_home.md"])
+        calls = self.read_calls()
+        self.assertEqual([q["name"] for q in calls[1]["questions"]],
+                         ["page:concepts/a_eng.md"])
         self.assertEqual(record["returned_pages"], ["concepts/a_eng.md"])
         self.assertEqual(record["jev_usage"], [{"input_tokens": 12, "output_tokens": 3},
                                                 {"input_tokens": 20, "output_tokens": 4}])
