@@ -152,6 +152,7 @@ mod evaluate_session;
 mod format_typecheck;
 mod gateguard;
 mod governance_capture;
+mod hook_ids;
 mod hookify;
 mod lifecycle;
 mod mcp_health;
@@ -183,34 +184,7 @@ fn main() {
     }
     let mut args = all.into_iter();
     let command = args.next().unwrap_or_default();
-    if args.next().is_some()
-        || ![
-            "config-protection",
-            "preflight",
-            "hookify",
-            "post-observer",
-            "lifecycle",
-            "session-hooks",
-            "governance-capture",
-            "observe",
-            "prompt-submit",
-            "doc-warning",
-            "doc-file-warning",
-            "suggest-compact",
-            "stop-hookify",
-            "check-console-log",
-            "format-typecheck",
-            "session-end",
-            "evaluate-session",
-            "cost-tracker",
-            "desktop-notify",
-            "mcp-health",
-            "gateguard",
-            "post-async",
-            "compact-summary",
-        ]
-        .contains(&command.as_str())
-    {
+    if args.next().is_some() || hook_ids::find_by_subcommand(&command).is_none() {
         eprintln!(
             "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|enable|decide>"
         );
