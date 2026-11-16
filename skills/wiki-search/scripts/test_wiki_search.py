@@ -20,14 +20,25 @@ if isinstance(configured, dict):
     print(json.dumps(configured))
 else:
     answers = {}
-    for question, (low, high) in zip(spec["questions"], configured):
-        answers[question["name"]] = {
-            "confidence": 0.68,
-            "legend": {"0": "none", "1": "low", "2": "high"},
-            "probabilities": {"0": 1 - low - high, "1": low, "2": high},
-            "score": 1.79,
-            "type": "score",
-        }
+    for question, score in zip(spec["questions"], configured):
+        labels = [level["label"].lower() for level in question["levels"]]
+        if labels == ["no", "yes"]:
+            answers[question["name"]] = {
+                "confidence": 0.68,
+                "legend": {"0": "no", "1": "yes"},
+                "probabilities": {"0": 1 - score, "1": score},
+                "score": 1.0,
+                "type": "score",
+            }
+        else:
+            low, high = score
+            answers[question["name"]] = {
+                "confidence": 0.68,
+                "legend": {"0": "none", "1": "low", "2": "high"},
+                "probabilities": {"0": 1 - low - high, "1": low, "2": high},
+                "score": 1.79,
+                "type": "score",
+            }
     print(json.dumps({"answers": answers}))
 '''
 
@@ -169,6 +180,65 @@ class WikiSearchCliTests(unittest.TestCase):
         proc = self.run_search([[(0.1, 0.6)]])
         self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
         self.assertTrue(proc.stdout.strip().endswith("concepts/plain.md\tPlain existing title"))
+
+    def add_schema(self, rows):
+        table = "| Domain | Description |\n| --- | --- |\n" + "".join(
+            f"| {name} | {description} |\n" for name, description in rows)
+        (self.wiki / "SCHEMA.md").write_text("# Schema\n\n## Domains\n\n" + table,
+                                             encoding="utf-8")
+
+    def test_domains_select_multiple_branches_and_only_send_allowed_metadata(self):
+        self.add_schema([
+            ("engineering", "Engineering description"),
+            ("home", "Home description"),
+            ("management", "Management description"),
+        ])
+        self.add_page("a_eng", "Engineering page", "PRIVATE ENG BODY", "[engineering]")
+        self.add_page("b_home", "Home page", "PRIVATE HOME BODY", "[home]")
+        self.add_page("c_mgmt", "Management page", "PRIVATE MGMT BODY", "[management]")
+        self.add_page("d_plain", "Unclassified page", "PRIVATE PLAIN BODY", "[]")
+        plain_path = self.wiki / "concepts" / "d_plain.md"
+        plain_path.write_text(plain_path.read_text(encoding="utf-8").replace("domains: []\n", ""),
+                              encoding="utf-8")
+        (self.wiki / "index.md").write_text(
+            "# Index\n- [[a_eng]] — Engineering summary\n"
+            "- [[b_home]] — Home summary\n- [[c_mgmt]] — Management summary\n"
+            "- [[d_plain]] — Plain summary\n", encoding="utf-8")
+        proc = self.run_search([[0.8, 0.6, 0.1], [(0.1, 0.5), (0.2, 0.4), (0.3, 0.5)]],
+                               "--domain-threshold", "0.5", "--max-domains", "2",
+                               "--threshold", "0.6", "--max-results", "1")
+        calls = self.read_calls()
+        self.assertEqual(len(calls), 2)
+        domain_questions = calls[0]["questions"]
+        self.assertEqual([q["name"] for q in domain_questions],
+                         ["domain:engineering", "domain:home", "domain:management"])
+        self.assertTrue(all([level["label"].lower() for level in q["levels"]] == ["no", "yes"]
+                            for q in domain_questions))
+        self.assertEqual([q["name"] for q in calls[1]["questions"]],
+                         ["page:concepts/a_eng.md", "page:concepts/b_home.md", "page:concepts/d_plain.md"])
+        self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
+        serialized = json.dumps(calls, ensure_ascii=False)
+        self.assertIn("Engineering description", serialized)
+        self.assertIn("Home description", serialized)
+        self.assertIn("Engineering summary", serialized)
+        self.assertNotIn("Management summary", serialized)
+        self.assertNotIn("PRIVATE", serialized)
+        self.assertNotIn("none", json.dumps(domain_questions, ensure_ascii=False).lower())
+
+    def test_domain_fallback_and_runtime_domain_limits_are_independent(self):
+        self.add_schema([("engineering", "Engineering"), ("home", "Home"),
+                         ("management", "Management")])
+        self.add_page("a_eng", "Engineering", "body", "[engineering]")
+        self.add_page("b_home", "Home", "body", "[home]")
+        self.add_page("c_plain", "Plain", "body", "")
+        proc = self.run_search([[0.2, 0.7, 0.9], [(0.4, 0.4), (0.1, 0.5)]],
+                               "--domain-threshold", "0.95", "--max-domains", "1",
+                               "--threshold", "0.8", "--max-results", "5")
+        calls = self.read_calls()
+        self.assertEqual([q["name"] for q in calls[1]["questions"]],
+                         ["page:concepts/b_home.md", "page:concepts/c_plain.md"])
+        self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
+        self.assertTrue(proc.stdout.strip().endswith("concepts/b_home.md\tHome"))
 
 
 if __name__ == "__main__":
