@@ -140,7 +140,8 @@ def load_domain_descriptions(wiki):
             continue
         if cells[0].lower() in {"domain", "name", "ドメイン"}:
             continue
-        name, description = cells[0], cells[1]
+        name = cells[0].strip("*_`")
+        description = re.sub(r"[*`]", "", cells[1])
         if name and description:
             descriptions[name] = description
     return descriptions

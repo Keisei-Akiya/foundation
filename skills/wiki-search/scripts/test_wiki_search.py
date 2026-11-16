@@ -225,6 +225,21 @@ class WikiSearchCliTests(unittest.TestCase):
         self.assertNotIn("PRIVATE", serialized)
         self.assertNotIn("none", json.dumps(domain_questions, ensure_ascii=False).lower())
 
+    def test_schema_domain_names_strip_markdown_emphasis(self):
+        self.add_schema([
+            ("**engineering**", "**Engineering** description"),
+            ("`management`", "`Management` description"),
+        ])
+        self.add_page("a_eng", "Engineering page", "body", "[engineering]")
+        self.add_page("b_mgmt", "Management page", "body", "[management]")
+        self.run_search([[0.8, 0.7], [(0.2, 0.5), (0.1, 0.4)]])
+        questions = self.read_calls()[0]["questions"]
+        self.assertEqual([question["name"] for question in questions],
+                         ["domain:engineering", "domain:management"])
+        serialized = json.dumps(questions, ensure_ascii=False)
+        self.assertIn("説明: Engineering description", serialized)
+        self.assertIn("説明: Management description", serialized)
+
     def test_domain_fallback_and_runtime_domain_limits_are_independent(self):
         self.add_schema([("engineering", "Engineering"), ("home", "Home"),
                          ("management", "Management")])
