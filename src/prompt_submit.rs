@@ -11,8 +11,13 @@ fn field<'a>(map: &'a Value, key: &str) -> Option<&'a str> {
         .filter(|s| !s.is_empty())
 }
 
+const MAX_SUMMARY_CHARS: usize = 4_000;
+
 fn latest_summary(current_session_id: &str) -> Option<String> {
     let store = crate::state::StateStore::from_env().ok()?;
+    if !store.is_opted_in("session-summary", false).ok()? {
+        return None;
+    }
     let records = store.read("session-summary").ok()?;
     let record = records.iter().rev().find(|record| {
         record
@@ -21,10 +26,7 @@ fn latest_summary(current_session_id: &str) -> Option<String> {
             .is_some_and(|session_id| !session_id.is_empty() && session_id != current_session_id)
     })?;
     let summary = field(record, "summary").or_else(|| field(record, "context"))?;
-    if summary.len() > 16_384 {
-        return None;
-    }
-    Some(summary.to_string())
+    Some(summary.chars().take(MAX_SUMMARY_CHARS).collect())
 }
 
 pub fn run(payload: &Value) {
