@@ -2,6 +2,7 @@
 """Score wiki pages against a rewritten question using foundation decide."""
 
 import argparse
+import datetime
 import json
 import math
 import re
@@ -29,6 +30,9 @@ def parse_args():
                         help="minimum P(yes) for a domain, default %(default)s")
     parser.add_argument("--max-domains", type=int, default=DEFAULT_MAX_DOMAINS,
                         help="maximum number of selected domains, default %(default)s")
+    parser.add_argument("--log", type=Path,
+                        default=Path.home() / ".local/state/foundation/wiki-search.jsonl",
+                        help="JSONL log path (default: %(default)s)")
     parser.add_argument("question", help="rewritten, context-complete question")
     args = parser.parse_args()
     if not 0 <= args.threshold <= 1:
@@ -184,7 +188,7 @@ def _select_question_result(answer):
     return by_label["low"] + by_label["high"]
 
 
-def score_questions(question, questions):
+def score_questions(question, questions, usage=None):
     spec = {"input": question, "questions": questions}
     try:
         result = subprocess.run(
@@ -200,6 +204,8 @@ def score_questions(question, questions):
     except json.JSONDecodeError as exc:
         raise ValueError(f"invalid Jev response: output is not JSON: {exc}") from exc
     answers = response.get("answers") if isinstance(response, dict) else None
+    if isinstance(response, dict) and isinstance(response.get("usage"), dict) and usage is not None:
+        usage.append(response["usage"])
     if not isinstance(answers, dict):
         raise ValueError("invalid Jev response: answers must be a dictionary")
     scores = []
@@ -211,7 +217,7 @@ def score_questions(question, questions):
     return scores
 
 
-def score_batch(question, pages):
+def score_batch(question, pages, usage=None):
     specs = [
         {
             "name": f"page:{page['path']}",
@@ -224,10 +230,10 @@ def score_batch(question, pages):
         }
         for page in pages
     ]
-    return score_questions(question, specs)
+    return score_questions(question, specs, usage)
 
 
-def score_domains(question, domains):
+def score_domains(question, domains, usage=None):
     specs = [
         {
             "name": f"domain:{domain['name']}",
@@ -240,14 +246,16 @@ def score_domains(question, domains):
         }
         for domain in domains
     ]
-    return score_questions(question, specs)
+    return score_questions(question, specs, usage)
 
 
 def search(question, wiki, threshold, max_results, domain_threshold=DEFAULT_DOMAIN_THRESHOLD,
-           max_domains=DEFAULT_MAX_DOMAINS):
+           max_domains=DEFAULT_MAX_DOMAINS, log_path=None):
     pages = discover_pages(wiki)
     if not pages:
         raise ValueError(f"no wiki pages found in {wiki}")
+    usage = []
+    domain_probabilities = {}
     candidates = pages
     if (wiki / "SCHEMA.md").is_file():
         descriptions = load_domain_descriptions(wiki)
@@ -264,7 +272,8 @@ def search(question, wiki, threshold, max_results, domain_threshold=DEFAULT_DOMA
             domain_scores = []
             for start in range(0, len(domains), BATCH_SIZE):
                 batch = domains[start:start + BATCH_SIZE]
-                domain_scores.extend(zip(score_domains(question, batch), batch))
+                domain_scores.extend(zip(score_domains(question, batch, usage), batch))
+            domain_probabilities = {domain["name"]: score for score, domain in domain_scores}
             selected_domains = [item for item in domain_scores if item[0] >= domain_threshold]
             if not selected_domains:
                 selected_domains = [max(domain_scores, key=lambda item: item[0])]
@@ -274,22 +283,40 @@ def search(question, wiki, threshold, max_results, domain_threshold=DEFAULT_DOMA
                           if not page["domains"] or selected_names.intersection(page["domains"])]
     if not candidates:
         raise ValueError(f"no wiki pages found in selected domains for {wiki}")
-    scored = []
-    for start in range(0, len(candidates), BATCH_SIZE):
-        batch = candidates[start:start + BATCH_SIZE]
-        scored.extend((score, page) for score, page in zip(score_batch(question, batch), batch))
+    scored_all = []
+    for start in range(0, len(pages), BATCH_SIZE):
+        batch = pages[start:start + BATCH_SIZE]
+        scored_all.extend((score, page) for score, page in zip(score_batch(question, batch, usage), batch))
+    candidate_paths = {page["path"] for page in candidates}
+    scored = [(score, page) for score, page in scored_all if page["path"] in candidate_paths]
     selected = [item for item in scored if item[0] >= threshold]
     if not selected:
         selected = [max(scored, key=lambda item: item[0])]
     selected.sort(key=lambda item: item[0], reverse=True)
-    return selected[:max_results]
+    results = selected[:max_results]
+    if log_path is not None:
+        record = {
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "question": question,
+            "domain_probabilities": domain_probabilities,
+            "page_scores": {page["path"]: score for score, page in scored_all},
+            "returned_pages": [page["path"] for _, page in results],
+            "jev_usage": usage,
+        }
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+        except OSError as exc:
+            print(f"wiki-search: cannot append JSONL log {log_path}: {exc}", file=sys.stderr)
+    return results
 
 
 def main():
     args = parse_args()
     try:
         results = search(args.question, args.wiki, args.threshold, args.max_results,
-                         args.domain_threshold, args.max_domains)
+                         args.domain_threshold, args.max_domains, args.log)
     except (OSError, ValueError) as exc:
         print(f"wiki-search: {exc}", file=sys.stderr)
         return 1

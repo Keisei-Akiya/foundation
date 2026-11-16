@@ -72,7 +72,8 @@ class WikiSearchCliTests(unittest.TestCase):
         env["FAKE_CALLS"] = str(self.calls)
         env["FAKE_RESPONSES"] = json.dumps(scores)
         proc = subprocess.run(
-            ["python3", "-I", str(SCRIPT), "--wiki", str(self.wiki), *args,
+            ["python3", "-I", str(SCRIPT), "--wiki", str(self.wiki),
+             "--log", str(self.root / "search.jsonl"), *args,
              "この文脈を補った質問"],
             text=True, capture_output=True, env=env,
         )
@@ -211,15 +212,15 @@ class WikiSearchCliTests(unittest.TestCase):
             encoding="utf-8")
         (self.wiki / "concepts" / "home.md").write_text(
             "---\ntitle: Home\ndomains:\n  - \"home\"\n---\nbody\n", encoding="utf-8")
-        self.run_search([[0.9, 0.1], [(0.8, 0.1)]])
+        self.run_search([[0.9, 0.1], [(0.8, 0.1), (0.1, 0.8)]])
         calls = self.read_calls()
         self.assertEqual([q["name"] for q in calls[0]["questions"]],
                          ["domain:engineering", "domain:home"])
         self.assertIn("Engineering domain description", json.dumps(calls[0], ensure_ascii=False))
         self.assertEqual([q["name"] for q in calls[1]["questions"]],
-                         ["page:concepts/engineering.md"])
+                         ["page:concepts/engineering.md", "page:concepts/home.md"])
 
-    def test_domains_select_multiple_branches_and_only_send_allowed_metadata(self):
+    def test_domains_score_every_page_and_only_send_allowed_metadata(self):
         self.add_schema([
             ("engineering", "Engineering description"),
             ("home", "Home description"),
@@ -236,7 +237,8 @@ class WikiSearchCliTests(unittest.TestCase):
             "# Index\n- [[a_eng]] — Engineering summary\n"
             "- [[b_home]] — Home summary\n- [[c_mgmt]] — Management summary\n"
             "- [[d_plain]] — Plain summary\n", encoding="utf-8")
-        proc = self.run_search([[0.8, 0.6, 0.1], [(0.1, 0.5), (0.2, 0.4), (0.3, 0.5)]],
+        proc = self.run_search([[0.8, 0.6, 0.1], [(0.1, 0.5), (0.2, 0.4),
+                                                 (0.3, 0.5), (0.4, 0.6)]],
                                "--domain-threshold", "0.5", "--max-domains", "2",
                                "--threshold", "0.6", "--max-results", "1")
         calls = self.read_calls()
@@ -247,13 +249,14 @@ class WikiSearchCliTests(unittest.TestCase):
         self.assertTrue(all([level["label"].lower() for level in q["levels"]] == ["no", "yes"]
                             for q in domain_questions))
         self.assertEqual([q["name"] for q in calls[1]["questions"]],
-                         ["page:concepts/a_eng.md", "page:concepts/b_home.md", "page:concepts/d_plain.md"])
+                         ["page:concepts/a_eng.md", "page:concepts/b_home.md",
+                          "page:concepts/c_mgmt.md", "page:concepts/d_plain.md"])
         self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
         serialized = json.dumps(calls, ensure_ascii=False)
         self.assertIn("Engineering description", serialized)
         self.assertIn("Home description", serialized)
         self.assertIn("Engineering summary", serialized)
-        self.assertNotIn("Management summary", serialized)
+        self.assertIn("Management summary", serialized)
         self.assertNotIn("PRIVATE", serialized)
         self.assertNotIn("none", json.dumps(domain_questions, ensure_ascii=False).lower())
 
@@ -278,14 +281,60 @@ class WikiSearchCliTests(unittest.TestCase):
         self.add_page("a_eng", "Engineering", "body", "[engineering]")
         self.add_page("b_home", "Home", "body", "[home]")
         self.add_page("c_plain", "Plain", "body", "")
-        proc = self.run_search([[0.2, 0.7, 0.9], [(0.4, 0.4), (0.1, 0.5)]],
+        proc = self.run_search([[0.2, 0.7, 0.9], [(0.4, 0.4), (0.1, 0.8), (0.4, 0.3)]],
                                "--domain-threshold", "0.95", "--max-domains", "1",
                                "--threshold", "0.8", "--max-results", "5")
         calls = self.read_calls()
         self.assertEqual([q["name"] for q in calls[1]["questions"]],
-                         ["page:concepts/b_home.md", "page:concepts/c_plain.md"])
+                         ["page:concepts/a_eng.md", "page:concepts/b_home.md",
+                          "page:concepts/c_plain.md"])
         self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
         self.assertTrue(proc.stdout.strip().endswith("concepts/b_home.md\tHome"))
+
+    def test_jsonl_logs_all_scores_probabilities_usage_and_returned_pages_once(self):
+        self.add_schema([("engineering", "Engineering"), ("home", "Home")])
+        self.add_page("a_eng", "Engineering", "body", "[engineering]")
+        self.add_page("b_home", "Home", "body", "[home]")
+        log = self.root / "custom.jsonl"
+        env = os.environ.copy()
+        env["PATH"] = str(self.bin) + os.pathsep + env["PATH"]
+        env["FAKE_CALLS"] = str(self.calls)
+        env["FAKE_RESPONSES"] = json.dumps([
+            {"answers": {
+                "domain:engineering": {"legend": {"0":"no","1":"yes"}, "probabilities":{"0":0.2,"1":0.8}},
+                "domain:home": {"legend": {"0":"no","1":"yes"}, "probabilities":{"0":0.7,"1":0.3}}},
+             "usage": {"input_tokens": 12, "output_tokens": 3}},
+            {"answers": {
+                "page:concepts/a_eng.md": {"legend":{"0":"none","1":"low","2":"high"}, "probabilities":{"0":0.1,"1":0.2,"2":0.7}},
+                "page:concepts/b_home.md": {"legend":{"0":"none","1":"low","2":"high"}, "probabilities":{"0":0.8,"1":0.1,"2":0.1}}},
+             "usage": {"input_tokens": 20, "output_tokens": 4}}
+        ])
+        proc = subprocess.run(["python3", "-I", str(SCRIPT), "--wiki", str(self.wiki),
+                              "--log", str(log), "--domain-threshold", "0.5", "--max-domains", "1",
+                              "--threshold", "0.5", "question text"],
+                             text=True, capture_output=True, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        lines = log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        record = json.loads(lines[0])
+        self.assertEqual(record["question"], "question text")
+        self.assertEqual(set(record["domain_probabilities"]), {"engineering", "home"})
+        self.assertEqual(record["domain_probabilities"]["home"], 0.3)
+        self.assertEqual(set(record["page_scores"]), {"concepts/a_eng.md", "concepts/b_home.md"})
+        self.assertEqual(record["page_scores"]["concepts/b_home.md"], 0.2)
+        self.assertEqual(record["returned_pages"], ["concepts/a_eng.md"])
+        self.assertEqual(record["jev_usage"], [{"input_tokens": 12, "output_tokens": 3},
+                                                {"input_tokens": 20, "output_tokens": 4}])
+        self.assertIn("timestamp", record)
+        self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
+
+    def test_jsonl_append_failure_does_not_prevent_results(self):
+        self.add_page("alpha", "Alpha", "body")
+        blocked = self.root / "blocked"
+        blocked.write_text("not a directory", encoding="utf-8")
+        proc = self.run_search([[(0.1, 0.7)]], "--log", str(blocked / "search.jsonl"))
+        self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
+        self.assertIn("log", proc.stderr.lower())
 
 
 if __name__ == "__main__":
