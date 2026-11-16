@@ -93,7 +93,7 @@ dependencies = [
 
 [[package]]
 name = "foundation"
-version = "0.0.16"
+version = "0.0.18"
 dependencies = [
  "regex",
  "serde_json",

@@ -175,6 +175,10 @@ fn main() {
     if all.first().map(String::as_str) == Some("decide") {
         std::process::exit(decide::run(&all[1..]));
     }
+    if all.first().map(String::as_str) == Some("cost-report") && all.len() == 1 {
+        cost_tracker::report();
+        return;
+    }
     let mut args = all.into_iter();
     let command = args.next().unwrap_or_default();
     if args.next().is_some()
