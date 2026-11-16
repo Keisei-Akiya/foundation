@@ -71,14 +71,17 @@ def _frontmatter_domains(path):
     match = re.match(r"\A---\s*\n(.*?)\n---(?:\s*\n|\Z)", text, re.DOTALL)
     if not match:
         return []
-    field = re.search(r"(?ms)^domains:\s*(.*?)(?=^[A-Za-z0-9_-]+:|\Z)", match.group(1))
+    field = re.search(r"(?ms)^domains:[ \t]*(.*?)(?=^[A-Za-z0-9_-]+:[ \t]*|\Z)", match.group(1))
     if not field:
         return []
     raw = field.group(1).strip()
     if not raw:
         return []
-    raw = raw.strip("[]")
-    return list(dict.fromkeys(_unquote(item) for item in raw.split(",") if _unquote(item)))
+    if re.match(r"-[ \t]+", raw):
+        items = re.findall(r"(?m)^[ \t]*-[ \t]+(.*?)\s*$", raw)
+    else:
+        items = raw.strip("[]").split(",")
+    return list(dict.fromkeys(_unquote(item) for item in items if _unquote(item)))
 
 
 def _index_summaries(wiki):

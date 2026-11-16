@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -8,6 +9,8 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).with_name("wiki_search.py")
+sys.path.insert(0, str(SCRIPT.parent))
+import wiki_search
 FAKE_FOUNDATION = r'''#!/usr/bin/env python3
 import json, os, sys
 spec = json.load(sys.stdin)
@@ -186,6 +189,35 @@ class WikiSearchCliTests(unittest.TestCase):
             f"| {name} | {description} |\n" for name, description in rows)
         (self.wiki / "SCHEMA.md").write_text("# Schema\n\n## Domains\n\n" + table,
                                              encoding="utf-8")
+
+    def test_frontmatter_domain_lists_parse_yaml_block_items_without_following_fields(self):
+        fixtures = {
+            "single": ("domains:\n- engineering", ["engineering"]),
+            "multiple": ("domains:\n  - 'engineering'\n  - \"home\"\ntags:\n  - management",
+                         ["engineering", "home"]),
+            "inline": ("domains: [engineering, 'home']", ["engineering", "home"]),
+        }
+        for slug, (fields, expected) in fixtures.items():
+            with self.subTest(slug=slug):
+                page = self.wiki / "concepts" / f"{slug}.md"
+                page.write_text(f"---\ntitle: {slug}\n{fields}\n---\n", encoding="utf-8")
+                self.assertEqual(wiki_search._frontmatter_domains(page), expected)
+
+    def test_block_list_domains_select_matching_pages_and_schema_descriptions(self):
+        self.add_schema([("engineering", "Engineering domain description"),
+                         ("home", "Home domain description")])
+        (self.wiki / "concepts" / "engineering.md").write_text(
+            "---\ntitle: Engineering\ndomains:\n- engineering\ntags:\n- home\n---\nbody\n",
+            encoding="utf-8")
+        (self.wiki / "concepts" / "home.md").write_text(
+            "---\ntitle: Home\ndomains:\n  - \"home\"\n---\nbody\n", encoding="utf-8")
+        self.run_search([[0.9, 0.1], [(0.8, 0.1)]])
+        calls = self.read_calls()
+        self.assertEqual([q["name"] for q in calls[0]["questions"]],
+                         ["domain:engineering", "domain:home"])
+        self.assertIn("Engineering domain description", json.dumps(calls[0], ensure_ascii=False))
+        self.assertEqual([q["name"] for q in calls[1]["questions"]],
+                         ["page:concepts/engineering.md"])
 
     def test_domains_select_multiple_branches_and_only_send_allowed_metadata(self):
         self.add_schema([
