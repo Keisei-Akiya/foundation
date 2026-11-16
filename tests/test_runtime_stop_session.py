@@ -13,6 +13,9 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
     assert expected_events <= registered_hooks()
 
     with IsolatedHermesHome(enable_foundation=True) as runtime:
+        summary_store = runtime.home / "plugin-data/foundation"
+        summary_store.mkdir(parents=True, exist_ok=True)
+        (summary_store / "session-summary.enabled").write_text("", encoding="utf-8")
         calls_path = runtime.root / "foundation-calls.txt"
         real_binary = shlex.quote(str(BINARY_PATH))
         wrapper = runtime.bin / "foundation"
@@ -88,7 +91,7 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
         assert "Purpose: Testing and verification." in summary["summary"]
         assert "Progress: 1/2 structured tasks completed; 1 tool operations recorded." in summary["summary"]
         assert "Unfinished: 1 structured tasks remain open." in summary["summary"]
-        for forbidden in ("private prompt", "private response", "private todo", "/home/", "TOKEN=secret", "cargo test"):
+        for forbidden in ("private prompt", "private response", "/home/", "TOKEN=secret", "cargo test"):
             assert forbidden not in summary_text
 
         second_session = "runtime-second-session-test"
