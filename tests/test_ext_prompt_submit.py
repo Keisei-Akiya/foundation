@@ -44,6 +44,9 @@ class PromptSubmitExtensionTests(unittest.TestCase):
         store = self.runtime.home / "plugin-data/foundation"
         store.mkdir(parents=True)
         (store / "session-summary.jsonl").write_text('{"summary":"Resume task 42"}\n', encoding="utf-8")
+        (store / "session-summary.enabled").write_text("", encoding="utf-8")
+        with (store / "session-summary.jsonl").open("a", encoding="utf-8") as records:
+            records.write('{"session_id":"previous-session","summary":"Resume task 42"}\n')
         results = invoke_hook(
             "pre_llm_call", user_message="hello", is_first_turn=True,
             session_id="new-session", task_id="task", turn_id="turn",

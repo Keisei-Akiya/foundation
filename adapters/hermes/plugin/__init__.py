@@ -119,7 +119,7 @@ def _payload(event: str, kwargs: dict[str, Any]) -> dict[str, Any]:
     for field in (
         "result", "tool_call_id", "task_id", "turn_id", "api_request_id",
         "conversation_id", "duration_ms", "status", "error_type", "error_message",
-        "middleware_trace",
+        "middleware_trace", "completed", "interrupted", "turn_exit_reason",
     ):
         if field in kwargs:
             payload[field] = kwargs[field]
@@ -190,6 +190,11 @@ def on_session_finalize(**kwargs: Any) -> None:
     run_subcommand("session-hooks", payload)
 
 
+def on_session_end(**kwargs: Any) -> None:
+    """Persist per-turn completion metadata for next-session recovery context."""
+    run_subcommand("session-hooks", _payload("on_session_end", kwargs))
+
+
 def _core() -> types.SimpleNamespace:
     """Helpers handed to hooks_ext modules. Wrappers resolve the globals at call time."""
     return types.SimpleNamespace(
@@ -230,4 +235,5 @@ def register(ctx: Any) -> None:
     ctx.register_hook("post_tool_call", on_post_tool_call)
     ctx.register_hook("on_session_start", on_session_start)
     ctx.register_hook("on_session_finalize", on_session_finalize)
+    ctx.register_hook("on_session_end", on_session_end)
     _load_extensions(ctx)

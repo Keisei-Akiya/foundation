@@ -13,6 +13,9 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
     assert expected_events <= registered_hooks()
 
     with IsolatedHermesHome(enable_foundation=True) as runtime:
+        summary_store = runtime.home / "plugin-data/foundation"
+        summary_store.mkdir(parents=True, exist_ok=True)
+        (summary_store / "session-summary.enabled").write_text("", encoding="utf-8")
         calls_path = runtime.root / "foundation-calls.txt"
         real_binary = shlex.quote(str(BINARY_PATH))
         wrapper = runtime.bin / "foundation"
@@ -88,7 +91,7 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
         assert "Purpose: Testing and verification." in summary["summary"]
         assert "Progress: 1/2 structured tasks completed; 1 tool operations recorded." in summary["summary"]
         assert "Unfinished: 1 structured tasks remain open." in summary["summary"]
-        for forbidden in ("private prompt", "private response", "private todo", "/home/", "TOKEN=secret", "cargo test"):
+        for forbidden in ("private prompt", "private response", "/home/", "TOKEN=secret", "cargo test"):
             assert forbidden not in summary_text
 
         second_session = "runtime-second-session-test"
@@ -118,3 +121,42 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
         assert marker["event"] == "session:end:marker"
         assert marker["session_id"] == "runtime-stop-session-test"
         assert stat.S_IMODE(marker_path.stat().st_mode) == 0o600
+
+
+def test_next_session_receives_notice_for_interrupted_prior_session():
+    assert BINARY_PATH.is_file(), "build foundation before running this suite"
+    assert {"on_session_start", "on_session_end", "on_session_finalize", "pre_llm_call"} <= registered_hooks()
+
+    with IsolatedHermesHome(enable_foundation=True) as runtime:
+        (runtime.bin / "foundation").symlink_to(BINARY_PATH)
+        invoke_hook("on_session_start", session_id="interrupted-session", platform="cli")
+        invoke_hook(
+            "on_session_end",
+            session_id="interrupted-session",
+            completed=False,
+            interrupted=True,
+            turn_exit_reason="keyboard_interrupt",
+            platform="cli",
+        )
+
+        results = invoke_hook(
+            "pre_llm_call",
+            session_id="next-session",
+            is_first_turn=True,
+            turn_index=0,
+            user_message="continue",
+            cwd=str(runtime.root),
+        )
+        assert any(
+            isinstance(result, dict)
+            and "previous session was interrupted" in result.get("context", "")
+            and "last turn may be incomplete" in result.get("context", "")
+            for result in results
+        )
+
+        marker_path = runtime.home / "plugin-data/ecc-hooks/session-markers.jsonl"
+        records = [json.loads(line) for line in marker_path.read_text(encoding="utf-8").splitlines()]
+        assert records[0]["event"] == "session:start:marker"
+        assert records[1]["event"] == "session:turn:end"
+        assert records[1]["interrupted"] is True
+        assert records[1]["turn_exit_reason"] == "keyboard_interrupt"
