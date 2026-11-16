@@ -141,6 +141,7 @@ fn valid_id(v: &str, max: usize, extra: &str) -> bool {
 }
 
 mod check_console_log;
+mod compact_summary;
 mod config_protection;
 mod cost_tracker;
 mod decide;
@@ -206,6 +207,7 @@ fn main() {
             "mcp-health",
             "gateguard",
             "post-async",
+            "compact-summary",
         ]
         .contains(&command.as_str())
     {
@@ -239,6 +241,7 @@ fn main() {
         "mcp-health" => mcp_health::run(&payload),
         "gateguard" => gateguard::run(&payload),
         "post-async" => post_async::run(&payload),
+        "compact-summary" => compact_summary::run(&payload),
         _ => unreachable!(),
     }
     let _ = io::stdout().flush();
