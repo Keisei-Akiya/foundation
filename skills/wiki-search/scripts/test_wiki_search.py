@@ -330,6 +330,24 @@ class WikiSearchCliTests(unittest.TestCase):
         self.assertIn("timestamp", record)
         self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
 
+    def test_jsonl_logs_score_for_page_below_threshold(self):
+        self.add_schema([("engineering", "Engineering")])
+        self.add_page("a_returned", "Returned page", "body", "[engineering]")
+        self.add_page("b_below_threshold", "Below threshold page", "body", "[engineering]")
+        self.run_search([[0.9], [(0.2, 0.6), (0.1, 0.2)]],
+                        "--domain-threshold", "0.5", "--threshold", "0.5")
+
+        lines = (self.root / "search.jsonl").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        record = json.loads(lines[0])
+        self.assertEqual(record["returned_pages"], ["concepts/a_returned.md"])
+        self.assertEqual(set(record["page_scores"]), {
+            "concepts/a_returned.md", "concepts/b_below_threshold.md"
+        })
+        self.assertAlmostEqual(record["page_scores"]["concepts/a_returned.md"], 0.8)
+        self.assertAlmostEqual(record["page_scores"]["concepts/b_below_threshold.md"], 0.3)
+        self.assertIsNotNone(record["page_scores"]["concepts/b_below_threshold.md"])
+
     def test_jsonl_append_failure_does_not_prevent_results(self):
         self.add_page("alpha", "Alpha", "body")
         blocked = self.root / "blocked"
