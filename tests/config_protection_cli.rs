@@ -12,7 +12,7 @@ impl TestDir {
     fn new() -> Self {
         let sequence = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "ecc-config-protection-{}-{sequence}",
+            "foundation-config-protection-{}-{sequence}",
             std::process::id()
         ));
         fs::create_dir_all(&path).expect("create isolated test directory");

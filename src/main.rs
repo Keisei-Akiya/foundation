@@ -48,7 +48,7 @@ const EDIT_TOOLS: &[&str] = &[
 const MAX_STDIN: usize = 1_048_576;
 
 fn warn(message: &str) {
-    eprintln!("[ecc-config-protection] {message}")
+    eprintln!("[foundation-config-protection] {message}")
 }
 fn as_nonempty_string(value: Option<&Value>) -> Option<&str> {
     value
@@ -152,6 +152,7 @@ mod evaluate_session;
 mod format_typecheck;
 mod gateguard;
 mod governance_capture;
+mod hook_ids;
 mod hookify;
 mod lifecycle;
 mod mcp_health;
@@ -183,34 +184,7 @@ fn main() {
     }
     let mut args = all.into_iter();
     let command = args.next().unwrap_or_default();
-    if args.next().is_some()
-        || ![
-            "config-protection",
-            "preflight",
-            "hookify",
-            "post-observer",
-            "lifecycle",
-            "session-hooks",
-            "governance-capture",
-            "observe",
-            "prompt-submit",
-            "doc-warning",
-            "doc-file-warning",
-            "suggest-compact",
-            "stop-hookify",
-            "check-console-log",
-            "format-typecheck",
-            "session-end",
-            "evaluate-session",
-            "cost-tracker",
-            "desktop-notify",
-            "mcp-health",
-            "gateguard",
-            "post-async",
-            "compact-summary",
-        ]
-        .contains(&command.as_str())
-    {
+    if args.next().is_some() || hook_ids::find_by_subcommand(&command).is_none() {
         eprintln!(
             "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|enable|decide>"
         );

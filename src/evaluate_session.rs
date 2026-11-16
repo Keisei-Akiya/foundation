@@ -1,4 +1,4 @@
-//! Mark sessions eligible for ECC-style pattern review without auto-generating skills.
+//! Mark sessions eligible for pattern review without auto-generating skills.
 use crate::state::StateStore;
 use serde_json::{json, Value};
 

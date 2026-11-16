@@ -95,7 +95,7 @@ class NativeConfigProtectionTests(unittest.TestCase):
         self.assertEqual(result["action"], "block")
         self.assertIn("timed out", result["message"])
 
-    def test_all_ecc_edit_tool_names_are_dispatched(self):
+    def test_all_foundation_edit_tool_names_are_dispatched(self):
         from unittest.mock import patch
 
         callback = self._callback()
