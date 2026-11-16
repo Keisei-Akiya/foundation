@@ -15,17 +15,21 @@ with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as f:
     f.write(json.dumps(spec, ensure_ascii=False) + "\n")
 responses = json.loads(os.environ["FAKE_RESPONSES"])
 call = sum(1 for _ in open(os.environ["FAKE_CALLS"], encoding="utf-8")) - 1
-print(json.dumps(responses[call]))
+configured = responses[call]
+if isinstance(configured, dict):
+    print(json.dumps(configured))
+else:
+    answers = {}
+    for question, (low, high) in zip(spec["questions"], configured):
+        answers[question["name"]] = {
+            "confidence": 0.68,
+            "legend": {"0": "none", "1": "low", "2": "high"},
+            "probabilities": {"0": 1 - low - high, "1": low, "2": high},
+            "score": 1.79,
+            "type": "score",
+        }
+    print(json.dumps({"answers": answers}))
 '''
-
-
-def response(scores):
-    # foundation decide の固定応答形式: 問い合わせ番号 -> 添字確率と legend。
-    probs = {str(i): {"0": 1 - low - high, "1": low, "2": high}
-             for i, (low, high) in enumerate(scores)}
-    legend = {str(i): {"0": "none", "1": "low", "2": "high"}
-              for i in range(len(scores))}
-    return {"probabilities": probs, "legend": legend}
 
 
 class WikiSearchCliTests(unittest.TestCase):
@@ -52,7 +56,7 @@ class WikiSearchCliTests(unittest.TestCase):
         env = os.environ.copy()
         env["PATH"] = str(self.bin) + os.pathsep + env["PATH"]
         env["FAKE_CALLS"] = str(self.calls)
-        env["FAKE_RESPONSES"] = json.dumps([response(s) for s in scores])
+        env["FAKE_RESPONSES"] = json.dumps(scores)
         proc = subprocess.run(
             ["python3", "-I", str(SCRIPT), "--wiki", str(self.wiki), *args,
              "この文脈を補った質問"],
@@ -103,6 +107,7 @@ class WikiSearchCliTests(unittest.TestCase):
         self.assertIn("Alpha title", serialized)
         self.assertIn("Alpha summary", serialized)
         self.assertNotIn("DO_NOT_SEND_BODY", serialized)
+        self.assertEqual(self.read_calls()[0]["questions"][0]["name"], "page:concepts/alpha.md")
 
     def test_batches_near_fifty_and_deduplicates_multidomain_pages(self):
         for i in range(51):
@@ -116,22 +121,48 @@ class WikiSearchCliTests(unittest.TestCase):
         self.assertEqual(len(proc.stdout.strip().splitlines()), 51)
         self.assertEqual(sum(len(call["questions"]) for call in calls), 51)
 
-    def test_malformed_probability_responses_fail_clearly(self):
+    def assert_invalid_response(self, response):
         self.add_page("alpha", "Alpha", "body")
-        for invalid in [
-            {"probabilities": [], "legend": {}},
-            {"probabilities": {"0": {"low": 0.4}}, "legend": {"0": {"1": "low"}}},
-            {"probabilities": {"0": {"1": 1.2}}, "legend": {"0": {"1": "low"}}},
-        ]:
-            env = os.environ.copy()
-            env["PATH"] = str(self.bin) + os.pathsep + env["PATH"]
-            env["FAKE_CALLS"] = str(self.calls)
-            env["FAKE_RESPONSES"] = json.dumps([invalid])
-            proc = subprocess.run(["python3", "-I", str(SCRIPT), "--wiki", str(self.wiki), "question"],
-                                  text=True, capture_output=True, env=env)
-            self.assertNotEqual(proc.returncode, 0)
-            self.assertIn("invalid Jev response", proc.stderr)
-            self.calls.unlink(missing_ok=True)
+        env = os.environ.copy()
+        env["PATH"] = str(self.bin) + os.pathsep + env["PATH"]
+        env["FAKE_CALLS"] = str(self.calls)
+        env["FAKE_RESPONSES"] = json.dumps([response])
+        proc = subprocess.run(["python3", "-I", str(SCRIPT), "--wiki", str(self.wiki), "question"],
+                              text=True, capture_output=True, env=env)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("invalid Jev response", proc.stderr)
+        self.calls.unlink(missing_ok=True)
+
+    def test_response_without_answers_fails_clearly(self):
+        self.assert_invalid_response({})
+
+    def test_empty_probabilities_fail_clearly(self):
+        answer = {"probabilities": {}, "legend": {"0": "none", "1": "low", "2": "high"}}
+        self.assert_invalid_response({"answers": {"page:concepts/alpha.md": answer}})
+
+    def test_non_integer_probability_keys_fail_clearly(self):
+        answer = {"probabilities": {"low": 0.4}, "legend": {"0": "none", "1": "low", "2": "high"}}
+        self.assert_invalid_response({"answers": {"page:concepts/alpha.md": answer}})
+
+    def test_out_of_range_probabilities_fail_clearly(self):
+        answer = {"probabilities": {"0": 0.1, "1": 1.2, "2": 0.2},
+                  "legend": {"0": "none", "1": "low", "2": "high"}}
+        self.assert_invalid_response({"answers": {"page:concepts/alpha.md": answer}})
+
+    def test_legend_without_low_fails_clearly(self):
+        answer = {"probabilities": {"0": 0.1, "1": 0.4, "2": 0.5},
+                  "legend": {"0": "none", "2": "high"}}
+        self.assert_invalid_response({"answers": {"page:concepts/alpha.md": answer}})
+
+    def test_legend_without_high_fails_clearly(self):
+        answer = {"probabilities": {"0": 0.1, "1": 0.4, "2": 0.5},
+                  "legend": {"0": "none", "1": "low"}}
+        self.assert_invalid_response({"answers": {"page:concepts/alpha.md": answer}})
+
+    def test_missing_question_answer_fails_clearly(self):
+        answer = {"probabilities": {"0": 0.1, "1": 0.4, "2": 0.5},
+                  "legend": {"0": "none", "1": "low", "2": "high"}}
+        self.assert_invalid_response({"answers": {}})
 
     def test_pages_need_no_added_frontmatter_fields(self):
         self.add_page("plain", "Plain existing title", "Existing content")

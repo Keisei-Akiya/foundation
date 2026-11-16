@@ -90,40 +90,33 @@ def discover_pages(wiki):
     return pages
 
 
-def _select_question_result(response):
-    if not isinstance(response, dict):
-        raise ValueError("invalid Jev response: expected a JSON object")
-    probabilities = response.get("probabilities")
-    legend = response.get("legend")
+def _select_question_result(answer):
+    if not isinstance(answer, dict):
+        raise ValueError("invalid Jev response: question answer must be an object")
+    probabilities = answer.get("probabilities")
+    legend = answer.get("legend")
     if not isinstance(probabilities, dict) or not probabilities:
         raise ValueError("invalid Jev response: probabilities must be a nonempty dictionary")
     if not isinstance(legend, dict) or not legend:
         raise ValueError("invalid Jev response: legend must be a nonempty dictionary")
-    # foundation decide returns maps by question index; accept a direct level map too.
-    if "0" in probabilities and isinstance(probabilities["0"], dict):
-        probabilities = probabilities["0"]
-    if "0" in legend and isinstance(legend["0"], dict):
-        legend = legend["0"]
-    if not isinstance(probabilities, dict) or not probabilities:
-        raise ValueError("invalid Jev response: probabilities must be a nonempty dictionary")
     for key, value in probabilities.items():
         if not isinstance(key, str) or not key.isdecimal():
             raise ValueError("invalid Jev response: probability keys must be integer indices")
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
             raise ValueError("invalid Jev response: probabilities must be between 0 and 1")
-    if not isinstance(legend, dict):
-        raise ValueError("invalid Jev response: legend must be a dictionary")
-    labels = {}
+    by_label = {}
     for key, label in legend.items():
-        if not isinstance(key, str) or not key.isdecimal():
-            raise ValueError("invalid Jev response: legend keys must be integer indices")
-        if isinstance(label, dict):
-            label = label.get("label")
-        if isinstance(label, str):
-            labels[key] = label.lower()
-    by_label = {label: probabilities[key] for key, label in labels.items() if key in probabilities}
-    if "low" not in by_label or "high" not in by_label:
-        raise ValueError("invalid Jev response: legend must identify low and high probabilities")
+        if not isinstance(key, str) or not key.isdecimal() or not isinstance(label, str):
+            raise ValueError("invalid Jev response: legend must map integer indices to labels")
+        normalized = label.lower()
+        if normalized in {"none", "low", "high"}:
+            if key not in probabilities:
+                raise ValueError(f"invalid Jev response: missing probability for legend label {normalized}")
+            if normalized in by_label:
+                raise ValueError(f"invalid Jev response: duplicate legend label {normalized}")
+            by_label[normalized] = probabilities[key]
+    if not all(label in by_label for label in ("none", "low", "high")):
+        raise ValueError("invalid Jev response: legend must identify none, low, and high probabilities")
     return by_label["low"] + by_label["high"]
 
 
@@ -132,7 +125,7 @@ def score_batch(question, pages):
         "input": question,
         "questions": [
             {
-                "name": str(index),
+                "name": f"page:{page['path']}",
                 "type": "score",
                 "instructions": (
                     f"このページを選ぶべきか採点する。\n"
@@ -140,7 +133,7 @@ def score_batch(question, pages):
                 ),
                 "levels": LEVELS,
             }
-            for index, page in enumerate(pages)
+            for page in pages
         ],
     }
     try:
@@ -156,19 +149,15 @@ def score_batch(question, pages):
         response = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise ValueError(f"invalid Jev response: output is not JSON: {exc}") from exc
+    answers = response.get("answers") if isinstance(response, dict) else None
+    if not isinstance(answers, dict):
+        raise ValueError("invalid Jev response: answers must be a dictionary")
     scores = []
-    for index in range(len(pages)):
-        item = dict(response)
-        probs = response.get("probabilities")
-        legends = response.get("legend")
-        if isinstance(probs, dict) and isinstance(legends, dict):
-            key = str(index)
-            if key in probs and isinstance(probs[key], dict):
-                item["probabilities"] = {"0": probs[key]}
-                item["legend"] = {"0": legends.get(key)} if key in legends else legends
-            elif index > 0:
-                raise ValueError(f"invalid Jev response: missing result for page {index}")
-        scores.append(_select_question_result(item))
+    for page in pages:
+        name = f"page:{page['path']}"
+        if name not in answers:
+            raise ValueError(f"invalid Jev response: missing answer for question {name}")
+        scores.append(_select_question_result(answers[name]))
     return scores
 
 
