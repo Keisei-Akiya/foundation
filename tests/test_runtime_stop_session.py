@@ -115,7 +115,7 @@ def test_stop_and_session_hooks_run_through_hermes_plugin_manager():
         assert evaluation["event"] == "stop:evaluate-session"
         assert evaluation["status"] == "eligible_for_manual_review"
 
-        marker_path = runtime.home / "plugin-data/ecc-hooks/session-markers.jsonl"
+        marker_path = runtime.home / "plugin-data/foundation/session-markers.jsonl"
         marker_text = marker_path.read_text(encoding="utf-8")
         marker = json.loads(marker_text.splitlines()[0])
         assert marker["event"] == "session:end:marker"
@@ -154,7 +154,7 @@ def test_next_session_receives_notice_for_interrupted_prior_session():
             for result in results
         )
 
-        marker_path = runtime.home / "plugin-data/ecc-hooks/session-markers.jsonl"
+        marker_path = runtime.home / "plugin-data/foundation/session-markers.jsonl"
         records = [json.loads(line) for line in marker_path.read_text(encoding="utf-8").splitlines()]
         assert records[0]["event"] == "session:start:marker"
         assert records[1]["event"] == "session:turn:end"

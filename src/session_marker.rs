@@ -13,7 +13,7 @@ pub fn previous_session_notice(payload: &Value) -> Option<&'static str> {
         return None;
     }
     let home = std::env::var_os("HERMES_HOME")?;
-    let path = Path::new(&home).join("plugin-data/ecc-hooks/session-markers.jsonl");
+    let path = Path::new(&home).join("plugin-data/foundation/session-markers.jsonl");
     let contents = std::fs::read_to_string(path).ok()?;
     let records: Vec<Value> = contents
         .lines()

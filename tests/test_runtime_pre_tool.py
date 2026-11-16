@@ -107,7 +107,7 @@ def test_pre_tool_call_dispatches_continuous_learning_observer_through_hermes():
             cwd=str(runtime.root),
         )
 
-        observations = runtime.home / "plugin-data/ecc-hooks/continuous-learning-observations.jsonl"
+        observations = runtime.home / "plugin-data/foundation/continuous-learning-observations.jsonl"
         records = [json.loads(line) for line in observations.read_text(encoding="utf-8").splitlines()]
         assert {"event": "pre:observe:continuous-learning", "tool_name": "read_file"} in records
 

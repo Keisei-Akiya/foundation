@@ -47,7 +47,7 @@ fn post_async_routes_skill_and_observer_without_persisting_tool_content() {
     assert_eq!(code, 0, "{stderr}");
     assert!(stdout.is_empty());
     assert!(stderr.is_empty(), "{stderr}");
-    let skill_path = home.join("plugin-data/ecc-hooks/skill-runs.jsonl");
+    let skill_path = home.join("plugin-data/foundation/skill-runs.jsonl");
     let skill_data = std::fs::read_to_string(&skill_path).unwrap_or_else(|error| {
         panic!(
             "missing skill record at {}: {error}; home={}",
@@ -57,7 +57,7 @@ fn post_async_routes_skill_and_observer_without_persisting_tool_content() {
     });
     let skill_record: Value = serde_json::from_str(skill_data.trim()).unwrap();
     assert_eq!(skill_record["skill_id"], "demo");
-    let observe_path = home.join("plugin-data/ecc-hooks/continuous-learning-observations.jsonl");
+    let observe_path = home.join("plugin-data/foundation/continuous-learning-observations.jsonl");
     let observe_record: Value =
         serde_json::from_str(std::fs::read_to_string(observe_path).unwrap().trim()).unwrap();
     assert_eq!(observe_record["tool_name"], "skill");
@@ -81,6 +81,8 @@ fn post_async_ignores_other_events() {
     assert_eq!(code, 0, "{stderr}");
     assert!(stdout.is_empty());
     assert!(stderr.is_empty());
-    assert!(!home.join("plugin-data/ecc-hooks/skill-runs.jsonl").exists());
+    assert!(!home
+        .join("plugin-data/foundation/skill-runs.jsonl")
+        .exists());
     let _ = std::fs::remove_dir_all(&home);
 }

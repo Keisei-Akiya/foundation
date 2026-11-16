@@ -6,7 +6,7 @@
 4. Use exactly one selected event/command pair; each hook has distinct behavior and data access. Sample config is not automatically installed.
 5. Validate the argv command and payload contract with the Rust CLI. No Hermes live connection test is claimed.
 
-Lifecycle tracking remains off unless the hook process explicitly receives `ECC_HERMES_SKILL_TRACK=1` and `HERMES_HOME`. It writes only validated identifier, version and normalized outcome to `$HERMES_HOME/plugin-data/ecc-hooks/skill-runs.jsonl`; avoid enabling where that metadata is not appropriate.
+Lifecycle tracking remains off unless the hook process explicitly receives `ECC_HERMES_SKILL_TRACK=1` and `HERMES_HOME`. It writes only validated identifier, version and normalized outcome to `$HERMES_HOME/plugin-data/foundation/skill-runs.jsonl`; avoid enabling where that metadata is not appropriate.
 
 To run the repository checks, use `mise run check`. This validates the whole working tree without modifying it.
 

@@ -44,7 +44,7 @@ pub fn run(payload: &Value) {
     let Some(tool) = safe_tool_name(payload.get("tool_name")) else {
         return;
     };
-    let path = home.join("plugin-data/ecc-hooks/continuous-learning-observations.jsonl");
+    let path = home.join("plugin-data/foundation/continuous-learning-observations.jsonl");
     let Some(parent) = path.parent() else {
         return;
     };

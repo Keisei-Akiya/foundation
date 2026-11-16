@@ -117,7 +117,7 @@ def test_skill_track_persists_failed_skill_run_via_hermes(monkeypatch: pytest.Mo
             error_message="injected skill failure",
         )
 
-        runs = runtime.home / "plugin-data/ecc-hooks/skill-runs.jsonl"
+        runs = runtime.home / "plugin-data/foundation/skill-runs.jsonl"
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline and not runs.exists():
             time.sleep(0.05)
@@ -158,7 +158,7 @@ def test_async_post_tool_is_nonblocking_and_persists_skill_run(monkeypatch: pyte
         monkeypatch.setenv("ECC_HERMES_SKILL_TRACK", "1")
         _reload_plugins()
 
-        runs = runtime.home / "plugin-data/ecc-hooks/skill-runs.jsonl"
+        runs = runtime.home / "plugin-data/foundation/skill-runs.jsonl"
         started = time.monotonic()
         results = invoke_hook(
             "post_tool_call",

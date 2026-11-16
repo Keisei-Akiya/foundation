@@ -168,7 +168,7 @@ fn caps_restored_summary_length() {
 fn reports_previous_interrupted_session_only_on_first_turn() {
     let home = std::env::temp_dir().join(format!("foundation-marker-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
-    let marker_dir = home.join("plugin-data/ecc-hooks");
+    let marker_dir = home.join("plugin-data/foundation");
     std::fs::create_dir_all(&marker_dir).unwrap();
     std::fs::write(
         marker_dir.join("session-markers.jsonl"),
@@ -200,7 +200,7 @@ fn reports_previous_interrupted_session_only_on_first_turn() {
 fn does_not_report_a_normally_finalized_session_and_fails_open_on_bad_markers() {
     let home = std::env::temp_dir().join(format!("foundation-marker-clean-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
-    let marker_dir = home.join("plugin-data/ecc-hooks");
+    let marker_dir = home.join("plugin-data/foundation");
     std::fs::create_dir_all(&marker_dir).unwrap();
     let marker_path = marker_dir.join("session-markers.jsonl");
     std::fs::write(
