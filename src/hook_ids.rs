@@ -61,7 +61,7 @@ pub const HOOK_IDS: &[HookId] = &[
         id: "prompt:submit",
         subcommand: Some("prompt-submit"),
         aliases: &[],
-        ecc_ids: &[],
+        ecc_ids: &["prompt:hookify-runtime"],
     },
     HookId {
         id: "pre:write:doc-file-warning",
@@ -242,46 +242,81 @@ mod tests {
             .split("## Wave 2 issues")
             .next()
             .expect("inventory primary table exists");
-        let rows: Vec<Vec<&str>> = primary_table
+        let table_lines: Vec<&str> = primary_table
             .lines()
             .filter(|line| line.starts_with('|'))
-            .map(|line| line.trim_matches('|').split('|').map(str::trim).collect())
             .collect();
-        let header = rows.first().expect("table header exists");
+        let header: Vec<&str> = table_lines[0][1..table_lines[0].len() - 1]
+            .split('|')
+            .map(str::trim)
+            .collect();
         let ecc_column = header
             .iter()
             .position(|cell| cell.contains("ECC metadata ID"))
-            .unwrap();
+            .expect("ECC metadata ID column exists");
         let foundation_column = header
             .iter()
             .position(|cell| *cell == "Foundation ID")
-            .unwrap();
-        let ecc_ids: HashSet<&str> = rows
-            .iter()
-            .skip(2)
-            .flat_map(|row| row[ecc_column].split('`').skip(1).step_by(2))
-            .collect();
+            .expect("Foundation ID column exists");
+        let mut inventory_mapping = Vec::new();
 
-        for row in rows.iter().skip(2) {
-            let foundation_id = row[foundation_column]
-                .split('`')
-                .nth(1)
-                .unwrap_or(row[foundation_column]);
-            if foundation_id == "—" {
+        for (line_number, line) in primary_table.lines().enumerate() {
+            if !line.starts_with('|') {
                 continue;
             }
             assert!(
-                find_by_id(foundation_id).is_some(),
-                "unknown Foundation ID: {foundation_id}"
+                !line.starts_with("||") && line.ends_with('|'),
+                "malformed primary-table row at line {}: {line}",
+                line_number + 1
             );
-        }
-        for hook in HOOK_IDS.iter().filter(|hook| !hook.ecc_ids.is_empty()) {
-            for ecc_id in hook.ecc_ids {
+            let cells: Vec<&str> = line[1..line.len() - 1].split('|').map(str::trim).collect();
+            assert_eq!(
+                cells.len(),
+                header.len(),
+                "primary-table row has shifted columns at line {}: {line}",
+                line_number + 1
+            );
+            if cells
+                .iter()
+                .all(|cell| cell.chars().all(|ch| ch == '-' || ch == ':'))
+            {
+                continue;
+            }
+            if cells[0].contains("ECC metadata ID") {
+                continue;
+            }
+
+            let foundation_id = cells[foundation_column]
+                .strip_prefix('`')
+                .and_then(|value| value.strip_suffix('`'))
+                .unwrap_or(cells[foundation_column]);
+            let ecc_ids: Vec<&str> = cells[ecc_column].split('`').skip(1).step_by(2).collect();
+            if foundation_id == "—" {
                 assert!(
-                    ecc_ids.contains(ecc_id),
-                    "ECC ID missing from inventory: {ecc_id}"
+                    ecc_ids.iter().all(|ecc_id| {
+                        HOOK_IDS.iter().all(|hook| !hook.ecc_ids.contains(ecc_id))
+                    }),
+                    "unmapped ECC registration unexpectedly has a Foundation ID: {line}"
                 );
+            } else {
+                assert!(
+                    find_by_id(foundation_id).is_some(),
+                    "unknown Foundation ID: {foundation_id}"
+                );
+                inventory_mapping.extend(ecc_ids.into_iter().map(|ecc_id| (foundation_id, ecc_id)));
             }
         }
+
+        let mut expected_mapping: Vec<(&str, &str)> = HOOK_IDS
+            .iter()
+            .filter(|hook| !hook.ecc_ids.is_empty())
+            .flat_map(|hook| hook.ecc_ids.iter().map(|ecc_id| (hook.id, *ecc_id)))
+            .collect();
+        inventory_mapping.sort();
+        expected_mapping.sort();
+        assert_eq!(
+            inventory_mapping, expected_mapping,
+            "inventory ECC-to-Foundation mappings must exactly match HOOK_IDS.ecc_ids"
+        );
     }
 }
