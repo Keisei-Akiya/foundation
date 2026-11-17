@@ -1,0 +1,65 @@
+use std::path::PathBuf;
+pub const USAGE: &str = "usage: foundation wiki-search --wiki <directory> [--threshold <0..1>] [--max-results <n>] [--timeout <secs>] <rewritten question>";
+pub struct Options {
+    pub wiki: PathBuf,
+    pub threshold: f64,
+    pub max_results: usize,
+    pub timeout: u64,
+    pub question: String,
+}
+pub fn parse(args: &[String]) -> Result<Options, String> {
+    let mut wiki = None;
+    let mut threshold = 0.2;
+    let mut max_results = 10;
+    let mut timeout = 60;
+    let mut rest = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--wiki" | "--threshold" | "--max-results" | "--timeout" => {
+                let key = args[i].as_str();
+                i += 1;
+                let val = args
+                    .get(i)
+                    .ok_or_else(|| format!("{key} requires a value"))?;
+                match key {
+                    "--wiki" => wiki = Some(PathBuf::from(val)),
+                    "--threshold" => {
+                        threshold = val
+                            .parse()
+                            .map_err(|_| "--threshold must be between 0 and 1")?
+                    }
+                    "--max-results" => {
+                        max_results = val
+                            .parse()
+                            .map_err(|_| "--max-results must be at least 1")?
+                    }
+                    _ => timeout = val.parse().map_err(|_| "--timeout must be 1..=600")?,
+                }
+            }
+            x if x.starts_with('-') => return Err(format!("unknown argument: {x}")),
+            x => rest.push(x.to_string()),
+        }
+        i += 1;
+    }
+    if !(0.0..=1.0).contains(&threshold) {
+        return Err("--threshold must be between 0 and 1".into());
+    }
+    if max_results == 0 {
+        return Err("--max-results must be at least 1".into());
+    }
+    if !(1..=600).contains(&timeout) {
+        return Err("--timeout must be 1..=600".into());
+    }
+    let question = rest.join(" ");
+    if question.trim().is_empty() {
+        return Err("rewritten question is required".into());
+    }
+    Ok(Options {
+        wiki: wiki.ok_or("--wiki is required")?,
+        threshold,
+        max_results,
+        timeout,
+        question,
+    })
+}

@@ -168,6 +168,7 @@ mod session_marker;
 mod state;
 mod stop_hookify;
 mod suggest_compact;
+mod wiki_search;
 
 fn main() {
     let all: Vec<String> = std::env::args().skip(1).collect();
@@ -178,6 +179,9 @@ fn main() {
     if all.first().map(String::as_str) == Some("decide") {
         std::process::exit(decide::run(&all[1..]));
     }
+    if all.first().map(String::as_str) == Some("wiki-search") {
+        std::process::exit(wiki_search::run(&all[1..]));
+    }
     if all.first().map(String::as_str) == Some("cost-report") && all.len() == 1 {
         cost_tracker::report();
         return;
@@ -186,7 +190,7 @@ fn main() {
     let command = args.next().unwrap_or_default();
     if args.next().is_some() || hook_ids::find_by_subcommand(&command).is_none() {
         eprintln!(
-            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|enable|decide>"
+            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|enable|decide|wiki-search>"
         );
         std::process::exit(2);
     }
