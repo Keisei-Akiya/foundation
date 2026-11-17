@@ -8,7 +8,7 @@ pub fn run(payload: &Value) {
 
     // ECC's asynchronous observer and skill tracker have native counterparts.
     // The observer applies its own opt-in config gate; lifecycle applies its
-    // ECC_HERMES_SKILL_TRACK opt-in and skill/tool validation.
+    // FOUNDATION_SKILL_TRACK opt-in and skill/tool validation.
     super::observe::run(payload);
     super::lifecycle::lifecycle(payload);
 

@@ -5,7 +5,7 @@ use std::path::Path;
 use super::valid_id;
 
 pub fn lifecycle(payload: &Value) {
-    if std::env::var("ECC_HERMES_SKILL_TRACK").ok().as_deref() != Some("1") {
+    if std::env::var("FOUNDATION_SKILL_TRACK").ok().as_deref() != Some("1") {
         return;
     }
     let Some(p) = payload.as_object() else {
@@ -58,7 +58,7 @@ pub fn lifecycle(payload: &Value) {
     let Ok(home) = std::env::var("HERMES_HOME") else {
         return;
     };
-    let dir = Path::new(&home).join("plugin-data/ecc-hooks");
+    let dir = Path::new(&home).join("plugin-data/foundation");
     if std::fs::create_dir_all(&dir).is_err() {
         return;
     }

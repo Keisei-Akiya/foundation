@@ -72,7 +72,7 @@ def test_gateguard_blocks_first_real_hermes_write_then_allows_retry():
 def test_governance_capture_persists_sanitized_event_via_real_hermes_hook(monkeypatch):
     with IsolatedHermesHome(enable_foundation=True) as runtime:
         shutil.copy2(BINARY_PATH, runtime.bin / "foundation")
-        monkeypatch.setenv("ECC_GOVERNANCE_CAPTURE", "1")
+        monkeypatch.setenv("FOUNDATION_GOVERNANCE_CAPTURE", "1")
         secret = "ghp_" + "A" * 36
         invoke_hook(
             "pre_tool_call",

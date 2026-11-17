@@ -57,7 +57,7 @@ fn append_marker(payload: &Value, event: &str) {
     let Ok(home) = std::env::var("HERMES_HOME") else {
         return;
     };
-    let dir = Path::new(&home).join("plugin-data/ecc-hooks");
+    let dir = Path::new(&home).join("plugin-data/foundation");
     if std::fs::create_dir_all(&dir).is_err() {
         return;
     }
