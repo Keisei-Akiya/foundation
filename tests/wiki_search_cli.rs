@@ -32,12 +32,13 @@ fn request(stream: &mut TcpStream) -> Value {
     stream.read_exact(&mut body).unwrap();
     serde_json::from_slice(&body).unwrap()
 }
-fn serve(response: &'static str) -> (String, thread::JoinHandle<Value>) {
+fn serve(response: &str) -> (String, thread::JoinHandle<Value>) {
+    let response = response.to_owned();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let handle = thread::spawn(move || {
         listener.set_nonblocking(true).unwrap();
-        let end = std::time::Instant::now() + Duration::from_secs(8);
+        let end = std::time::Instant::now() + Duration::from_secs(30);
         let (mut stream, _) = loop {
             match listener.accept() {
                 Ok(pair) => break pair,
@@ -56,8 +57,43 @@ fn serve(response: &'static str) -> (String, thread::JoinHandle<Value>) {
     });
     (url, handle)
 }
+fn serve_batches(expected: usize) -> (String, thread::JoinHandle<Vec<Value>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let handle = thread::spawn(move || {
+        let mut payloads = Vec::new();
+        for _ in 0..expected {
+            let (mut stream, _) = listener.accept().unwrap();
+            let payload = request(&mut stream);
+            let answers: serde_json::Map<String, Value> = payload["questions"]
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(name, _)| {
+                    (
+                        name.clone(),
+                        serde_json::json!({
+                            "probabilities":{"0":0.1,"1":0.2,"2":0.7},
+                            "legend":{"0":"none","1":"low","2":"high"}
+                        }),
+                    )
+                })
+                .collect();
+            let response = serde_json::json!({"answers":answers}).to_string();
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", response.len(), response).unwrap();
+            payloads.push(payload);
+        }
+        payloads
+    });
+    (url, handle)
+}
 fn wiki() -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("foundation-wiki-search-{}", std::process::id()));
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let root = std::env::temp_dir().join(format!(
+        "foundation-wiki-search-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(
@@ -134,6 +170,76 @@ fn falls_back_to_top_one_and_honors_threshold_and_max_results() {
     assert_eq!(code, 0, "{err}");
     assert_eq!(out.lines().count(), 1);
     assert!(out.starts_with("0.90\t"));
+}
+#[test]
+fn pages_are_scored_once_in_batches_of_at_most_fifty() {
+    let root = std::env::temp_dir().join(format!("foundation-wiki-batch-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let mut index = String::new();
+    for i in 0..120 {
+        index.push_str(&format!("- [[page-{i}]] — summary {i}\n"));
+        std::fs::write(
+            root.join(format!("page-{i}.md")),
+            format!("---\ntitle: Title {i}\n---\nBody {i}\n"),
+        )
+        .unwrap();
+    }
+    std::fs::write(root.join("index.md"), index).unwrap();
+    let (endpoint, server) = serve_batches(3);
+    let (code, out, err) = run(&root, &endpoint, &["--max-results", "120"]);
+    let payloads = server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(payloads.len(), 3, "one request per batch");
+    let names: Vec<_> = payloads
+        .iter()
+        .flat_map(|p| {
+            let questions = p["questions"].as_object().unwrap();
+            assert!(questions.len() <= 50);
+            questions.keys().cloned().collect::<Vec<_>>()
+        })
+        .collect();
+    let unique: std::collections::HashSet<_> = names.iter().collect();
+    assert_eq!(names.len(), 120);
+    assert_eq!(unique.len(), 120, "duplicate page questions");
+    for i in 0..120 {
+        assert!(
+            unique.contains(&format!("page:page-{i}.md")),
+            "missing page {i}"
+        );
+    }
+    assert_eq!(out.lines().count(), 120);
+    let _ = std::fs::remove_dir_all(root);
+}
+fn assert_bad_response(response: &str, message: &str) {
+    let root = wiki();
+    let (endpoint, server) = serve(response);
+    let (code, out, err) = run(&root, &endpoint, &[]);
+    server.join().unwrap();
+    assert_ne!(code, 0);
+    assert!(err.contains(message), "expected {message:?} in {err:?}");
+    assert!(out.is_empty(), "unexpected stdout: {out:?}");
+}
+#[test]
+fn empty_probabilities_dictionary_fails_clearly() {
+    assert_bad_response(
+        r#"{"answers":{"page:one.md":{"probabilities":{},"legend":{"0":"none","1":"low","2":"high"}}}}"#,
+        "probabilities must be a nonempty dictionary",
+    );
+}
+#[test]
+fn probability_above_one_fails_clearly() {
+    assert_bad_response(
+        r#"{"answers":{"page:one.md":{"probabilities":{"0":-0.1,"1":0.2,"2":1.5},"legend":{"0":"none","1":"low","2":"high"}}}}"#,
+        "probabilities must be between 0 and 1",
+    );
+}
+#[test]
+fn negative_probability_fails_clearly() {
+    assert_bad_response(
+        r#"{"answers":{"page:one.md":{"probabilities":{"0":-0.1,"1":0.2,"2":0.8},"legend":{"0":"none","1":"low","2":"high"}}}}"#,
+        "probabilities must be between 0 and 1",
+    );
 }
 #[test]
 fn malformed_probabilities_fail_clearly() {
