@@ -14,23 +14,28 @@ pub(super) struct Target {
 
 pub(super) fn target(opts: &Options, spec: &Value, dry_run: bool) -> Result<Target, String> {
     match opts.provider {
-        Provider::TypeSafe => {
-            let model = opts.model.as_deref().unwrap_or(DEFAULT_MODEL);
-            let body = build_typesafe(spec, model)?;
-            let endpoint =
-                checked_endpoint(&env("TYPESAFE_BASE_URL").unwrap_or_else(|| DEFAULT_BASE.into()))?;
-            let key = match auth_env(&["TYPESAFE_API_KEY"]) {
-                Some((_, key)) => key,
-                None if dry_run => String::new(),
-                None => return Err("TYPESAFE_API_KEY is not set".into()),
-            };
-            Ok(Target {
-                url: format!("{}/v1/systemone", endpoint.trim_end_matches('/')),
-                auth_header: ("Authorization", format!("Bearer {key}")),
-                body,
-            })
-        }
+        Provider::TypeSafe => target_for(
+            spec,
+            opts.model.as_deref().unwrap_or(DEFAULT_MODEL),
+            dry_run,
+        ),
     }
+}
+
+pub(super) fn target_for(spec: &Value, model: &str, dry_run: bool) -> Result<Target, String> {
+    let body = build_typesafe(spec, model)?;
+    let endpoint =
+        checked_endpoint(&env("TYPESAFE_BASE_URL").unwrap_or_else(|| DEFAULT_BASE.into()))?;
+    let key = match auth_env(&["TYPESAFE_API_KEY"]) {
+        Some((_, key)) => key,
+        None if dry_run => String::new(),
+        None => return Err("TYPESAFE_API_KEY is not set".into()),
+    };
+    Ok(Target {
+        url: format!("{}/v1/systemone", endpoint.trim_end_matches('/')),
+        auth_header: ("Authorization", format!("Bearer {key}")),
+        body,
+    })
 }
 
 fn checked_endpoint(endpoint: &str) -> Result<String, String> {
