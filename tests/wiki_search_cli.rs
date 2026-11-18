@@ -48,6 +48,37 @@ fn serve(response: &str) -> (String, thread::JoinHandle<Value>) {
     });
     (url, handle)
 }
+fn serve_custom_stages(
+    domain_response: &str,
+    page_response: &str,
+) -> (String, thread::JoinHandle<Vec<Value>>) {
+    let domain_response = domain_response.to_owned();
+    let page_response = page_response.to_owned();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let handle = thread::spawn(move || {
+        let mut payloads = Vec::new();
+        for response in [&domain_response, &page_response] {
+            let (mut stream, _) = listener.accept().unwrap();
+            payloads.push(request(&mut stream));
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", response.len(), response).unwrap();
+        }
+        payloads
+    });
+    (url, handle)
+}
+fn serve_stage1(response: &str) -> (String, thread::JoinHandle<Value>) {
+    let response = response.to_owned();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let payload = request(&mut stream);
+        write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", response.len(), response).unwrap();
+        payload
+    });
+    (url, handle)
+}
 fn serve_search_stages() -> (String, thread::JoinHandle<Vec<Value>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -330,6 +361,110 @@ fn domain_stage_filters_pages_and_keeps_unassigned_pages() {
     let page_payload = &payloads[1];
     assert_eq!(page_payload["questions"].as_object().unwrap().len(), 4);
     assert_eq!(page_payload["state"], "How do pages relate?");
+}
+
+#[test]
+fn domain_threshold_fallback_keeps_only_the_top_domain_and_unassigned_pages() {
+    let root = wiki();
+    std::fs::write(
+        root.join("one.md"),
+        "---\ntitle: one\ndomains: [engineering]\n---\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("two.md"),
+        "---\ntitle: two\ndomains: [economics]\n---\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("three.md"), "---\ntitle: three\n---\n").unwrap();
+    let domains = r#"{"answers":{"domain:engineering":{"probabilities":{"0":0.8,"1":0.2},"legend":{"0":"yes","1":"no"}},"domain:economics":{"probabilities":{"0":0.7,"1":0.3},"legend":{"0":"yes","1":"no"}}}}"#;
+    let pages = r#"{"answers":{"page:one.md":{"probabilities":{"0":0.05,"1":0.05,"2":0.9},"legend":{"0":"none","1":"low","2":"high"}},"page:three.md":{"probabilities":{"0":0.8,"1":0.1,"2":0.1},"legend":{"0":"none","1":"low","2":"high"}}}}"#;
+    let (endpoint, server) = serve_custom_stages(domains, pages);
+    let (code, out, err) = run(&root, &endpoint, &["--domain-threshold", "0.9"]);
+    let payloads = server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    assert!(out.contains("one.md") && out.contains("three.md"));
+    assert!(!out.contains("two.md"));
+    let sent: Vec<_> = payloads[1]["questions"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert!(sent.contains(&"page:one.md") && sent.contains(&"page:three.md"));
+    assert!(!sent.contains(&"page:two.md"));
+}
+
+#[test]
+fn domain_max_and_page_max_results_are_independent_and_domain_args_validate() {
+    let root = wiki();
+    std::fs::write(
+        root.join("one.md"),
+        "---\ntitle: one\ndomains: [engineering]\n---\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("two.md"),
+        "---\ntitle: two\ndomains: [economics]\n---\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("three.md"),
+        "---\ntitle: three\ndomains: [engineering]\n---\n",
+    )
+    .unwrap();
+    let domains = r#"{"answers":{"domain:engineering":{"probabilities":{"0":0.9,"1":0.1},"legend":{"0":"yes","1":"no"}},"domain:economics":{"probabilities":{"0":0.8,"1":0.2},"legend":{"0":"yes","1":"no"}}}}"#;
+    let pages = r#"{"answers":{"page:one.md":{"probabilities":{"0":0.05,"1":0.05,"2":0.9},"legend":{"0":"none","1":"low","2":"high"}},"page:two.md":{"probabilities":{"0":0.8,"1":0.1,"2":0.1},"legend":{"0":"none","1":"low","2":"high"}},"page:three.md":{"probabilities":{"0":0.7,"1":0.2,"2":0.1},"legend":{"0":"none","1":"low","2":"high"}}}}"#;
+    let (endpoint, server) = serve_custom_stages(domains, pages);
+    let (code, out, err) = run(
+        &root,
+        &endpoint,
+        &[
+            "--domain-max",
+            "1",
+            "--threshold",
+            "0",
+            "--max-results",
+            "2",
+        ],
+    );
+    let payloads = server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(out.lines().count(), 2);
+    assert_eq!(payloads[1]["questions"].as_object().unwrap().len(), 2);
+    for (args, msg) in [
+        (vec!["--domain-threshold", "1.5"], "--domain-threshold"),
+        (vec!["--domain-max", "0"], "--domain-max"),
+    ] {
+        let (code, out, err) = run(&root, "http://127.0.0.1:1", &args);
+        assert_ne!(code, 0);
+        assert!(err.contains(msg), "{err}");
+        assert!(out.is_empty());
+    }
+}
+
+#[test]
+fn malformed_domain_stage1_responses_fail_without_stdout() {
+    for response in [
+        r#"{"answers":{"domain:engineering":{"probabilities":{"0":0.8,"1":0.2},"legend":{"0":"yes","1":"no"}}}}"#,
+        r#"{"answers":{"domain:engineering":{"legend":{"0":"yes"}}}}"#,
+        r#"{"answers":{"domain:engineering":{"probabilities":{"x":0.8},"legend":{"0":"yes"}}}}"#,
+        r#"{"answers":{"domain:engineering":{"probabilities":{"0":1.5},"legend":{"0":"yes"}}}}"#,
+        r#"{"answers":{"domain:engineering":{"probabilities":{"0":-0.1},"legend":{"0":"yes"}}}}"#,
+        r#"{"answers":{"domain:engineering":{"probabilities":{"0":0.8},"legend":{"0":"affirmative"}}}}"#,
+        "not JSON",
+    ] {
+        let root = wiki();
+        let (endpoint, server) = serve_stage1(response);
+        let (code, out, err) = run(&root, &endpoint, &[]);
+        server.join().unwrap();
+        assert_ne!(code, 0, "response: {response}");
+        assert!(
+            err.contains("invalid Jev response"),
+            "response: {response}, stderr: {err:?}"
+        );
+        assert!(out.is_empty(), "response: {response}, stdout: {out:?}");
+    }
 }
 
 #[test]
