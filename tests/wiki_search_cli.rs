@@ -468,6 +468,68 @@ fn malformed_domain_stage1_responses_fail_without_stdout() {
 }
 
 #[test]
+fn wiki_search_appends_jsonl_with_complete_scores_usage_and_handles_failures() {
+    let root = wiki();
+    let log = root.join("nested/search.jsonl");
+    let domains = r#"{"answers":{"domain:engineering":{"probabilities":{"0":0.8,"1":0.2},"legend":{"0":"yes","1":"no"}},"domain:economics":{"probabilities":{"0":0.1,"1":0.9},"legend":{"0":"yes","1":"no"}}},"usage":{"input_tokens":3,"output_tokens":2}}"#;
+    let pages = r#"{"answers":{"page:one.md":{"probabilities":{"0":0.1,"1":0.2,"2":0.7},"legend":{"0":"none","1":"low","2":"high"}},"page:two.md":{"probabilities":{"0":0.1,"1":0.2,"2":0.7},"legend":{"0":"none","1":"low","2":"high"}},"page:three.md":{"probabilities":{"0":0.5,"1":0.2,"2":0.1},"legend":{"0":"none","1":"low","2":"high"}}},"usage":{"input_tokens":7,"output_tokens":4}}"#;
+    let (endpoint, server) = serve_custom_stages(domains, pages);
+    let (code, out, err) = run(
+        &root,
+        &endpoint,
+        &[
+            "--domain-threshold",
+            "0.5",
+            "--log-path",
+            log.to_str().unwrap(),
+        ],
+    );
+    server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    assert!(!out.is_empty());
+    let lines = std::fs::read_to_string(&log).unwrap();
+    let record: Value = serde_json::from_str(lines.trim()).unwrap();
+    assert_eq!(record["input"], "How do pages relate?");
+    assert!(record["timestamp"].as_str().unwrap().ends_with('Z'));
+    assert_eq!(record["domain_probabilities"]["engineering"], 0.8);
+    assert_eq!(record["domain_probabilities"]["economics"], 0.1);
+    assert!((record["page_scores"]["one.md"].as_f64().unwrap() - 0.9).abs() < 1e-9);
+    assert!((record["page_scores"]["two.md"].as_f64().unwrap() - 0.9).abs() < 1e-9);
+    assert!((record["page_scores"]["three.md"].as_f64().unwrap() - 0.3).abs() < 1e-9);
+    assert_eq!(record["usage"]["input_tokens"], 10);
+    assert_eq!(record["usage"]["output_tokens"], 6);
+    assert!(!lines.contains("secret body"));
+
+    let (endpoint, server) = serve_custom_stages(domains, pages);
+    let (code, _, err) = run(
+        &root,
+        &endpoint,
+        &[
+            "--domain-threshold",
+            "0.5",
+            "--log-path",
+            log.to_str().unwrap(),
+        ],
+    );
+    server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(std::fs::read_to_string(&log).unwrap().lines().count(), 2);
+
+    let directory = root.join("is-a-directory");
+    std::fs::create_dir(&directory).unwrap();
+    let (endpoint, server) = serve(ANSWERS);
+    let (code, out, err) = run(
+        &root,
+        &endpoint,
+        &["--log-path", directory.to_str().unwrap()],
+    );
+    server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    assert!(!out.is_empty());
+    assert!(err.contains("warning"), "{err}");
+}
+
+#[test]
 fn malformed_probabilities_fail_clearly() {
     let root = wiki();
     let response = r#"{"answers":{"page:one.md":{"probabilities":{"x":0.1},"legend":{"0":"none","1":"low","2":"high"}}}}"#;

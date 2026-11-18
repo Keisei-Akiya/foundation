@@ -60,10 +60,10 @@ pub fn score_domains(
     question: &str,
     domains: &[(String, String)],
     timeout: u64,
-) -> Result<Vec<DomainProbability>, String> {
+) -> Result<(Vec<DomainProbability>, Value), String> {
     let questions: Vec<_> = domains.iter().map(|(name, desc)| json!({"name":format!("domain:{name}"),"type":"score","instructions":format!("判定この検索質問がドメインに該当するか。ドメイン: {name}\n説明: {desc}"),"levels":[{"label":"yes"},{"label":"no"}]})).collect();
     let spec = json!({"input":question,"questions":questions});
-    let (raw, _) = decide::communicate(&spec, "jev-latest", timeout)
+    let (raw, usage) = decide::communicate(&spec, "jev-latest", timeout)
         .map_err(|e| format!("foundation decide failed: {e}"))?;
     let result: Value = serde_json::from_str(&raw)
         .map_err(|e| format!("invalid Jev response: output is not JSON: {e}"))?;
@@ -71,7 +71,7 @@ pub fn score_domains(
         .get("answers")
         .and_then(Value::as_object)
         .ok_or("invalid Jev response: answers must be a dictionary")?;
-    domains
+    let probabilities = domains
         .iter()
         .map(|(name, _)| {
             let key = format!("domain:{name}");
@@ -101,7 +101,8 @@ pub fn score_domains(
                 yes,
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok((probabilities, usage))
 }
 pub fn candidates(
     pages: &[Page],
@@ -130,13 +131,15 @@ pub fn candidates(
         .cloned()
         .collect()
 }
-pub fn score(question: &str, pages: &[Page], timeout: u64) -> Result<Vec<f64>, String> {
+pub fn score(question: &str, pages: &[Page], timeout: u64) -> Result<(Vec<f64>, Value), String> {
     let mut all = Vec::new();
+    let mut usage = Value::Object(Default::default());
     for batch in pages.chunks(BATCH) {
         let questions:Vec<_>=batch.iter().map(|p|json!({"name":format!("page:{}",p.path),"type":"score","instructions":format!("このページを選ぶべきか採点する。\nタイトル: {}\n要約: {}",p.title,p.summary),"levels":[{"label":"none"},{"label":"low"},{"label":"high"}]})).collect();
         let spec = json!({"input":question,"questions":questions});
-        let (raw, _) = decide::communicate(&spec, "jev-latest", timeout)
+        let (raw, batch_usage) = decide::communicate(&spec, "jev-latest", timeout)
             .map_err(|e| format!("foundation decide failed: {e}"))?;
+        sum_usage(&mut usage, &batch_usage);
         let result: Value = serde_json::from_str(&raw)
             .map_err(|e| format!("invalid Jev response: output is not JSON: {e}"))?;
         let answers = result
@@ -151,5 +154,15 @@ pub fn score(question: &str, pages: &[Page], timeout: u64) -> Result<Vec<f64>, S
             all.push(select(ans)?)
         }
     }
-    Ok(all)
+    Ok((all, usage))
+}
+pub(crate) fn sum_usage(total: &mut Value, next: &Value) {
+    if let (Some(dst), Some(src)) = (total.as_object_mut(), next.as_object()) {
+        for (key, value) in src {
+            if let Some(n) = value.as_u64() {
+                let current = dst.get(key).and_then(Value::as_u64).unwrap_or(0);
+                dst.insert(key.clone(), json!(current + n));
+            }
+        }
+    }
 }
