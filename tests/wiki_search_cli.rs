@@ -468,6 +468,56 @@ fn malformed_domain_stage1_responses_fail_without_stdout() {
 }
 
 #[test]
+fn wiki_search_logs_unscored_filtered_pages_as_null() {
+    let root = wiki();
+    let log = root.join("nested/filtered-search.jsonl");
+    for (name, domain) in [("one", "engineering"), ("two", "economics"), ("three", "")] {
+        let front = if domain.is_empty() {
+            String::new()
+        } else {
+            format!("domains: [{domain}]\n")
+        };
+        std::fs::write(
+            root.join(format!("{name}.md")),
+            format!("---\ntitle: {name}\n{front}---\n"),
+        )
+        .unwrap();
+    }
+    let domains = r#"{"answers":{"domain:engineering":{"probabilities":{"0":0.8,"1":0.2},"legend":{"0":"yes","1":"no"}},"domain:economics":{"probabilities":{"0":0.1,"1":0.9},"legend":{"0":"yes","1":"no"}}}}"#;
+    let pages = r#"{"answers":{"page:one.md":{"probabilities":{"0":0.1,"1":0.2,"2":0.7},"legend":{"0":"none","1":"low","2":"high"}},"page:three.md":{"probabilities":{"0":0.5,"1":0.2,"2":0.1},"legend":{"0":"none","1":"low","2":"high"}}}}"#;
+    let (endpoint, server) = serve_custom_stages(domains, pages);
+    let (code, out, err) = run(
+        &root,
+        &endpoint,
+        &[
+            "--domain-threshold",
+            "0.5",
+            "--log-path",
+            log.to_str().unwrap(),
+        ],
+    );
+    let payloads = server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    let sent: Vec<_> = payloads[1]["questions"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert!(sent.contains(&"page:one.md") && sent.contains(&"page:three.md"));
+    assert!(!sent.contains(&"page:two.md"));
+
+    let lines = std::fs::read_to_string(&log).unwrap();
+    let record: Value = serde_json::from_str(lines.trim()).unwrap();
+    assert_eq!(record["domain_probabilities"]["engineering"], 0.8);
+    assert_eq!(record["domain_probabilities"]["economics"], 0.1);
+    assert_eq!(record["page_scores"]["two.md"], Value::Null);
+    assert!(record["page_scores"]["one.md"].is_number());
+    assert!(record["page_scores"]["three.md"].is_number());
+    assert!(!out.contains("two.md"), "filtered page returned: {out}");
+}
+
+#[test]
 fn wiki_search_appends_jsonl_with_complete_scores_usage_and_handles_failures() {
     let root = wiki();
     let log = root.join("nested/search.jsonl");
