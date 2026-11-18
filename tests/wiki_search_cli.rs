@@ -203,6 +203,42 @@ fn run(root: &std::path::Path, endpoint: &str, extra: &[&str]) -> (i32, String, 
 }
 const ANSWERS: &str = r#"{"answers":{"page:one.md":{"probabilities":{"0":0.1,"1":0.2,"2":0.7},"legend":{"0":"none","1":"low","2":"high"}},"page:two.md":{"probabilities":{"0":0.5,"1":0.2,"2":0.1},"legend":{"0":"none","1":"low","2":"high"}},"page:three.md":{"probabilities":{"0":0.1,"1":0.3,"2":0.2},"legend":{"0":"none","1":"low","2":"high"}}}}"#;
 #[test]
+fn stage1_domain_questions_ignore_pipe_characters_outside_domain_table() {
+    let root = wiki();
+    std::fs::write(
+        root.join("SCHEMA.md"),
+        "# Wiki Schema\n\n## Domain\n\n| Domain | 範囲 | スコープ外（当面） |\n|--------|------|-------------------|\n| **engineering** | Software and systems | Cooking only |\n| **economics** | Markets and policy | Personal logs |\n| **management** | Organizations and leadership | Personal logs |\n\n## Frontmatter examples\n\n```yaml\ntype: entity | concept | comparison | query | summary\ndomains: [engineering]   # engineering | economics | management | media\n# media: novel | manga | anime | game\n```\n",
+    )
+    .unwrap();
+    let (endpoint, server) = serve_search_stages();
+    let (code, _out, err) = run(&root, &endpoint, &[]);
+    let payloads = server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    let names: Vec<String> = match payloads[0]["questions"].as_array() {
+        Some(items) => items
+            .iter()
+            .map(|question| question["name"].as_str().unwrap().to_owned())
+            .collect(),
+        None => payloads[0]["questions"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect(),
+    };
+    let actual: std::collections::BTreeSet<_> = names.into_iter().collect();
+    let expected = [
+        "domain:engineering",
+        "domain:economics",
+        "domain:management",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn cli_sends_only_page_metadata_and_returns_sorted_threshold_matches() {
     let root = wiki();
     let (endpoint, server) = serve(ANSWERS);

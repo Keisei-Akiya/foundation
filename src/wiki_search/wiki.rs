@@ -82,6 +82,9 @@ pub fn schema_domains(root: &Path) -> Result<Vec<(String, String)>, String> {
         .map_err(|e| format!("cannot read SCHEMA.md: {e}"))?;
     let mut domains = Vec::new();
     for line in schema.lines() {
+        if !line.trim().starts_with('|') {
+            continue;
+        }
         let cells: Vec<_> = line.split('|').map(str::trim).collect();
         if cells.len() >= 4 {
             let name = cells[1].trim_matches('*').trim();
