@@ -5,3 +5,4 @@
 
 - `decision-model-knowledge/`: 判断モデル、Jev、質問と回答の型の概念。
 - `decide-cli/`: `foundation decide` の使い方。
+- `wiki-search/`: `foundation wiki-search` の使い方。バイナリは別途インストールして利用する。

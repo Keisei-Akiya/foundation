@@ -92,3 +92,5 @@ Lefthookの `pre-commit` は `mise run precommit` を実行する。
 いずれかの検査が失敗した場合、indexと作業ツリーは変更されず、commitは中止される。
 ヘルパーはUnix系環境を前提とする。
 ビルドキャッシュには `CARGO_TARGET_DIR` を使い、未設定の場合は `target/` を使う。
+
+`foundation wiki-search` appends one JSONL record per invocation to `$XDG_STATE_HOME/foundation/wiki-search.jsonl` (or `~/.local/state/foundation/wiki-search.jsonl` when `XDG_STATE_HOME` is unset). Override the destination with `--log-path <file>`. The log contains input text, domain/page scores, returned page paths and Jev usage; page bodies are not logged.

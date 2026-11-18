@@ -10,6 +10,7 @@ mod target;
 
 use args::{parse_args, USAGE};
 use http::send;
+use target::target_for;
 
 use serde_json::{json, Value};
 use spec::read_spec;
@@ -45,8 +46,12 @@ pub fn run(args: &[String]) -> i32 {
         );
         return 0;
     }
-    match send(&t, opts.timeout) {
-        Ok(text) => {
+    match communicate(
+        &spec,
+        opts.model.as_deref().unwrap_or("jev-latest"),
+        opts.timeout,
+    ) {
+        Ok((text, _usage)) => {
             match serde_json::from_str::<Value>(&text) {
                 Ok(v) => println!("{}", serde_json::to_string_pretty(&v).unwrap()),
                 Err(_) => println!("{text}"),
@@ -58,4 +63,19 @@ pub fn run(args: &[String]) -> i32 {
             1
         }
     }
+}
+
+/// Acquire Jev authentication, send a generic spec, and return response JSON and usage.
+pub(crate) fn communicate(
+    spec: &Value,
+    model: &str,
+    timeout: u64,
+) -> Result<(String, Value), String> {
+    let target = target_for(spec, model, false)?;
+    let text = send(&target, timeout)?;
+    let usage = serde_json::from_str::<Value>(&text)
+        .ok()
+        .and_then(|response| response.get("usage").cloned())
+        .unwrap_or(Value::Null);
+    Ok((text, usage))
 }
