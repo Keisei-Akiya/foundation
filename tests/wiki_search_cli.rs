@@ -37,23 +37,51 @@ fn serve(response: &str) -> (String, thread::JoinHandle<Value>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let handle = thread::spawn(move || {
-        listener.set_nonblocking(true).unwrap();
-        let end = std::time::Instant::now() + Duration::from_secs(30);
-        let (mut stream, _) = loop {
-            match listener.accept() {
-                Ok(pair) => break pair,
-                Err(e)
-                    if e.kind() == std::io::ErrorKind::WouldBlock
-                        && std::time::Instant::now() < end =>
-                {
-                    thread::sleep(Duration::from_millis(10))
-                }
-                Err(e) => panic!("mock server accept failed: {e}"),
-            }
-        };
+        let (mut first, _) = listener.accept().unwrap();
+        let _domain_payload = request(&mut first);
+        let domain_response = r#"{"answers":{"domain:engineering":{"probabilities":{"0":1.0,"1":0.0},"legend":{"0":"yes","1":"no"}},"domain:economics":{"probabilities":{"0":1.0,"1":0.0},"legend":{"0":"yes","1":"no"}}}}"#;
+        write!(first,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",domain_response.len(),domain_response).unwrap();
+        let (mut stream, _) = listener.accept().unwrap();
         let body = request(&mut stream);
         write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",response.len(),response).unwrap();
         body
+    });
+    (url, handle)
+}
+fn serve_search_stages() -> (String, thread::JoinHandle<Vec<Value>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let handle = thread::spawn(move || {
+        let mut payloads = Vec::new();
+        for stage in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let payload = request(&mut stream);
+            let questions: Vec<(String, Value)> = match payload["questions"].as_array() {
+                Some(items) => items
+                    .iter()
+                    .map(|q| (q["name"].as_str().unwrap().to_owned(), q.clone()))
+                    .collect(),
+                None => payload["questions"]
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
+            };
+            let answers = questions.into_iter().map(|(name, _)| {
+                let answer = if stage == 0 {
+                    let yes = if name.contains("engineering") || name.contains("economics") { 0.8 } else { 0.2 };
+                    serde_json::json!({"probabilities":{"0":yes,"1":1.0-yes},"legend":{"0":"yes","1":"no"}})
+                } else {
+                    serde_json::json!({"probabilities":{"0":0.1,"1":0.2,"2":0.7},"legend":{"0":"none","1":"low","2":"high"}})
+                };
+                (name, answer)
+            }).collect::<serde_json::Map<_, _>>();
+            let response = serde_json::json!({"answers":answers}).to_string();
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", response.len(), response).unwrap();
+            payloads.push(payload);
+        }
+        payloads
     });
     (url, handle)
 }
@@ -62,26 +90,33 @@ fn serve_batches(expected: usize) -> (String, thread::JoinHandle<Vec<Value>>) {
     let url = format!("http://{}", listener.local_addr().unwrap());
     let handle = thread::spawn(move || {
         let mut payloads = Vec::new();
-        for _ in 0..expected {
+        for stage in 0..=expected {
             let (mut stream, _) = listener.accept().unwrap();
             let payload = request(&mut stream);
-            let answers: serde_json::Map<String, Value> = payload["questions"]
-                .as_object()
-                .unwrap()
-                .iter()
-                .map(|(name, _)| {
-                    (
-                        name.clone(),
-                        serde_json::json!({
-                            "probabilities":{"0":0.1,"1":0.2,"2":0.7},
-                            "legend":{"0":"none","1":"low","2":"high"}
-                        }),
-                    )
-                })
-                .collect();
+            let answers: serde_json::Map<String, Value> = if stage == 0 {
+                let names: Vec<String> = match payload["questions"].as_array() {
+                    Some(items) => items
+                        .iter()
+                        .map(|q| q["name"].as_str().unwrap().to_owned())
+                        .collect(),
+                    None => payload["questions"]
+                        .as_object()
+                        .unwrap()
+                        .keys()
+                        .cloned()
+                        .collect(),
+                };
+                names.into_iter().map(|name| (name, serde_json::json!({"probabilities":{"0":1.0,"1":0.0},"legend":{"0":"yes","1":"no"}}))).collect()
+            } else {
+                payload["questions"].as_object().unwrap().iter().map(|(name, _)| (
+                    name.clone(), serde_json::json!({"probabilities":{"0":0.1,"1":0.2,"2":0.7},"legend":{"0":"none","1":"low","2":"high"}})
+                )).collect()
+            };
             let response = serde_json::json!({"answers":answers}).to_string();
             write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", response.len(), response).unwrap();
-            payloads.push(payload);
+            if stage > 0 {
+                payloads.push(payload);
+            }
         }
         payloads
     });
@@ -96,6 +131,7 @@ fn wiki() -> std::path::PathBuf {
     ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("SCHEMA.md"), "# Wiki Schema\n\n## Domain\n\n| Domain | 範囲 | スコープ外（当面） |\n|--------|------|-------------------|\n| **engineering** | Software and systems | Cooking only |\n| **economics** | Markets and policy | Personal logs |\n").unwrap();
     std::fs::write(
         root.join("index.md"),
         "- [[one]] — summary one\n- [[two]] — summary two\n- [[three]] — summary three\n",
@@ -176,6 +212,7 @@ fn pages_are_scored_once_in_batches_of_at_most_fifty() {
     let root = std::env::temp_dir().join(format!("foundation-wiki-batch-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("SCHEMA.md"), "## Domain\n| Domain | 範囲 | スコープ外 |\n|---|---|---|\n| **engineering** | Software and systems | Cooking |\n| **economics** | Markets and policy | Personal logs |\n").unwrap();
     let mut index = String::new();
     for i in 0..120 {
         index.push_str(&format!("- [[page-{i}]] — summary {i}\n"));
@@ -241,6 +278,60 @@ fn negative_probability_fails_clearly() {
         "probabilities must be between 0 and 1",
     );
 }
+#[test]
+fn domain_stage_filters_pages_and_keeps_unassigned_pages() {
+    // Domain scoring is an independent Yes/No request before page scoring.
+    let root = wiki();
+    std::fs::write(root.join("SCHEMA.md"), "## Domain\n| **engineering** | Software and systems | Not cooking |\n| **economics** | Markets and policy | Personal logs |\n").unwrap();
+    let mut index = std::fs::read_to_string(root.join("index.md")).unwrap();
+    index.push_str("- [[four]] — summary four\n");
+    std::fs::write(root.join("index.md"), index).unwrap();
+    std::fs::write(
+        root.join("four.md"),
+        "---\ntitle: four\ndomains: [engineering, economics]\n---\nsecret page body\n",
+    )
+    .unwrap();
+    for (name, domain) in [
+        ("one", "engineering"),
+        ("two", "economics"),
+        ("three", ""),
+        ("four", "engineering, economics"),
+    ] {
+        let front = if domain.is_empty() {
+            String::new()
+        } else {
+            format!("domains: [{domain}]\n")
+        };
+        std::fs::write(
+            root.join(format!("{name}.md")),
+            format!("---\ntitle: {}\n{front}---\nsecret page body\n", name),
+        )
+        .unwrap();
+    }
+    let (endpoint, server) = serve_search_stages();
+    let (code, out, err) = run(
+        &root,
+        &endpoint,
+        &["--domain-threshold", "0.5", "--domain-max", "2"],
+    );
+    let payloads = server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        out.contains("one.md")
+            && out.contains("two.md")
+            && out.contains("three.md")
+            && out.contains("four.md")
+    );
+    let domain_payload = &payloads[0];
+    let text = domain_payload.to_string();
+    assert!(text.contains("engineering") && text.contains("Software and systems"));
+    assert!(text.contains("economics") && text.contains("Markets and policy"));
+    assert!(!text.contains("secret page body"));
+    let page_payload = &payloads[1];
+    assert_eq!(page_payload["questions"].as_object().unwrap().len(), 4);
+    assert_eq!(page_payload["state"], "How do pages relate?");
+}
+
 #[test]
 fn malformed_probabilities_fail_clearly() {
     let root = wiki();

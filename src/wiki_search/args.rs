@@ -1,9 +1,11 @@
 use std::path::PathBuf;
-pub const USAGE: &str = "usage: foundation wiki-search --wiki <directory> [--threshold <0..1>] [--max-results <n>] [--timeout <secs>] <rewritten question>";
+pub const USAGE: &str = "usage: foundation wiki-search --wiki <directory> [--threshold <0..1>] [--max-results <n>] [--domain-threshold <0..1>] [--domain-max <n>] [--timeout <secs>] <rewritten question>";
 pub struct Options {
     pub wiki: PathBuf,
     pub threshold: f64,
     pub max_results: usize,
+    pub domain_threshold: f64,
+    pub domain_max: usize,
     pub timeout: u64,
     pub question: String,
 }
@@ -11,12 +13,16 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
     let mut wiki = None;
     let mut threshold = 0.2;
     let mut max_results = 10;
+    // Provisional defaults; tune only after retrieval evaluation.
+    let mut domain_threshold = 0.1;
+    let mut domain_max = 5;
     let mut timeout = 60;
     let mut rest = Vec::new();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--wiki" | "--threshold" | "--max-results" | "--timeout" => {
+            "--wiki" | "--threshold" | "--max-results" | "--domain-threshold" | "--domain-max"
+            | "--timeout" => {
                 let key = args[i].as_str();
                 i += 1;
                 let val = args
@@ -34,6 +40,14 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
                             .parse()
                             .map_err(|_| "--max-results must be at least 1")?
                     }
+                    "--domain-threshold" => {
+                        domain_threshold = val
+                            .parse()
+                            .map_err(|_| "--domain-threshold must be between 0 and 1")?
+                    }
+                    "--domain-max" => {
+                        domain_max = val.parse().map_err(|_| "--domain-max must be at least 1")?
+                    }
                     _ => timeout = val.parse().map_err(|_| "--timeout must be 1..=600")?,
                 }
             }
@@ -41,6 +55,12 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
             x => rest.push(x.to_string()),
         }
         i += 1;
+    }
+    if !(0.0..=1.0).contains(&domain_threshold) {
+        return Err("--domain-threshold must be between 0 and 1".into());
+    }
+    if domain_max == 0 {
+        return Err("--domain-max must be at least 1".into());
     }
     if !(0.0..=1.0).contains(&threshold) {
         return Err("--threshold must be between 0 and 1".into());
@@ -59,6 +79,8 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
         wiki: wiki.ok_or("--wiki is required")?,
         threshold,
         max_results,
+        domain_threshold,
+        domain_max,
         timeout,
         question,
     })

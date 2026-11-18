@@ -51,6 +51,85 @@ pub fn select(answer: &Value) -> Result<f64, String> {
     }
     Ok(by_label["low"] + by_label["high"])
 }
+#[derive(Clone)]
+pub struct DomainProbability {
+    pub domain: String,
+    pub yes: f64,
+}
+pub fn score_domains(
+    question: &str,
+    domains: &[(String, String)],
+    timeout: u64,
+) -> Result<Vec<DomainProbability>, String> {
+    let questions: Vec<_> = domains.iter().map(|(name, desc)| json!({"name":format!("domain:{name}"),"type":"score","instructions":format!("判定この検索質問がドメインに該当するか。ドメイン: {name}\n説明: {desc}"),"levels":[{"label":"yes"},{"label":"no"}]})).collect();
+    let spec = json!({"input":question,"questions":questions});
+    let (raw, _) = decide::communicate(&spec, "jev-latest", timeout)
+        .map_err(|e| format!("foundation decide failed: {e}"))?;
+    let result: Value = serde_json::from_str(&raw)
+        .map_err(|e| format!("invalid Jev response: output is not JSON: {e}"))?;
+    let answers = result
+        .get("answers")
+        .and_then(Value::as_object)
+        .ok_or("invalid Jev response: answers must be a dictionary")?;
+    domains
+        .iter()
+        .map(|(name, _)| {
+            let key = format!("domain:{name}");
+            let ans = answers.get(&key).ok_or_else(|| {
+                format!("invalid Jev response: missing answer for question {key}")
+            })?;
+            let p = ans
+                .get("probabilities")
+                .and_then(Value::as_object)
+                .ok_or("invalid Jev response: probabilities must be a dictionary")?;
+            let legend = ans
+                .get("legend")
+                .and_then(Value::as_object)
+                .ok_or("invalid Jev response: legend must be a dictionary")?;
+            let yes_key = legend
+                .iter()
+                .find(|(_, v)| v.as_str().is_some_and(|s| s.eq_ignore_ascii_case("yes")))
+                .map(|(k, _)| k)
+                .ok_or("invalid Jev response: legend must identify yes")?;
+            let yes = p
+                .get(yes_key)
+                .and_then(Value::as_f64)
+                .filter(|n| n.is_finite() && (0.0..=1.0).contains(n))
+                .ok_or("invalid Jev response: missing valid yes probability")?;
+            Ok(DomainProbability {
+                domain: name.clone(),
+                yes,
+            })
+        })
+        .collect()
+}
+pub fn candidates(
+    pages: &[Page],
+    scores: &[DomainProbability],
+    threshold: f64,
+    max: usize,
+) -> Vec<Page> {
+    let mut ranking = scores.to_vec();
+    ranking.sort_by(|a, b| {
+        b.yes
+            .total_cmp(&a.yes)
+            .then_with(|| a.domain.cmp(&b.domain))
+    });
+    let mut picked: Vec<_> = ranking
+        .iter()
+        .filter(|s| s.yes >= threshold)
+        .take(max)
+        .map(|s| s.domain.as_str())
+        .collect();
+    if picked.is_empty() {
+        picked.extend(ranking.first().map(|s| s.domain.as_str()));
+    }
+    pages
+        .iter()
+        .filter(|p| p.domains.is_empty() || p.domains.iter().any(|d| picked.contains(&d.as_str())))
+        .cloned()
+        .collect()
+}
 pub fn score(question: &str, pages: &[Page], timeout: u64) -> Result<Vec<f64>, String> {
     let mut all = Vec::new();
     for batch in pages.chunks(BATCH) {

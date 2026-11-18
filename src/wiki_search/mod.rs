@@ -18,14 +18,34 @@ pub fn run(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let scores = match score::score(&opts.question, &pages, opts.timeout) {
+    let domains = match wiki::schema_domains(&opts.wiki) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("foundation wiki-search: {e}");
             return 1;
         }
     };
-    let result = format::select(&pages, &scores, opts.threshold, opts.max_results);
+    let domain_scores = match score::score_domains(&opts.question, &domains, opts.timeout) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("foundation wiki-search: {e}");
+            return 1;
+        }
+    };
+    let candidates = score::candidates(
+        &pages,
+        &domain_scores,
+        opts.domain_threshold,
+        opts.domain_max,
+    );
+    let scores = match score::score(&opts.question, &candidates, opts.timeout) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("foundation wiki-search: {e}");
+            return 1;
+        }
+    };
+    let result = format::select(&candidates, &scores, opts.threshold, opts.max_results);
     print!("{}", format::render(&result));
     0
 }

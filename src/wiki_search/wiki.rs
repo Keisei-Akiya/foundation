@@ -9,6 +9,7 @@ pub struct Page {
     pub path: String,
     pub title: String,
     pub summary: String,
+    pub domains: Vec<String>,
 }
 fn files(dir: &Path, root: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     for item in fs::read_dir(dir)
@@ -56,6 +57,45 @@ fn unquote(s: &str) -> String {
         s.to_string()
     }
 }
+fn frontmatter_domains(text: &str) -> Vec<String> {
+    let Some(header) = text
+        .strip_prefix("---")
+        .and_then(|s| s.split_once("\n---").map(|p| p.0))
+    else {
+        return Vec::new();
+    };
+    let Some(value) = header
+        .lines()
+        .find_map(|line| line.strip_prefix("domains:").map(str::trim))
+    else {
+        return Vec::new();
+    };
+    let value = value.trim_start_matches('[').trim_end_matches(']');
+    value
+        .split(',')
+        .map(|s| unquote(s.trim()))
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+pub fn schema_domains(root: &Path) -> Result<Vec<(String, String)>, String> {
+    let schema = fs::read_to_string(root.join("SCHEMA.md"))
+        .map_err(|e| format!("cannot read SCHEMA.md: {e}"))?;
+    let mut domains = Vec::new();
+    for line in schema.lines() {
+        let cells: Vec<_> = line.split('|').map(str::trim).collect();
+        if cells.len() >= 4 {
+            let name = cells[1].trim_matches('*').trim();
+            let desc = cells[2];
+            if !name.is_empty() && name != "Domain" && !name.starts_with('-') && !desc.is_empty() {
+                domains.push((name.to_string(), desc.to_string()));
+            }
+        }
+    }
+    if domains.is_empty() {
+        return Err("no domains found in SCHEMA.md".into());
+    }
+    Ok(domains)
+}
 pub fn discover(root: &Path) -> Result<Vec<Page>, String> {
     if !root.is_dir() {
         return Err(format!("wiki directory does not exist: {}", root.display()));
@@ -90,10 +130,12 @@ pub fn discover(root: &Path) -> Result<Vec<Page>, String> {
             let text = fs::read_to_string(&p).ok()?;
             let title = title(&text)?;
             let stem = p.file_stem()?.to_string_lossy().to_string();
+            let domains = frontmatter_domains(&text);
             Some(Page {
                 path: rel,
                 title,
                 summary: summaries.get(&stem).cloned().unwrap_or_default(),
+                domains,
             })
         })
         .collect();
