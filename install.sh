@@ -5,9 +5,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version 0.0.18
 #
 # Downloads the prebuilt release from GitHub Releases, verifies its SHA256, then
-# installs into <HERMES_HOME>. By default it never edits config.yaml or hook
-# allowlists and never restarts Hermes. The native plugin is enabled by default;
-# --enable-hooks remains opt-in.
+# installs into <HERMES_HOME>. It never edits config.yaml or hook allowlists and
+# never restarts Hermes. The native plugin is always enabled.
 set -eu
 
 REPO="Keisei-Akiya/foundation"
@@ -15,21 +14,15 @@ TARGET="x86_64-unknown-linux-musl"
 ASSET="foundation-$TARGET.tar.gz"
 
 version="latest"
-enable_hooks=0
-enable_plugin=1
 hermes_home="${HERMES_HOME:-${HOME:?HOME is not set}/.hermes}"
 
 usage() {
   cat <<EOF
-Usage: install.sh [--version X.Y.Z] [--hermes-home DIR] [--enable-plugin] [--enable-hooks]
+Usage: install.sh [--version X.Y.Z] [--hermes-home DIR]
 
 Installs foundation (foundation binary, adapters, skills, docs).
 
   --version X.Y.Z    Release to install (default: latest).
-  --enable-hooks     Also enable all hooks: back up config.yaml, add the hooks
-                     (merged into an existing hooks section if any), and approve
-                     those hooks in the allowlist (opt-in).
-  --enable-plugin    Enable the native foundation plugin with Hermes CLI (default).
   --hermes-home DIR  Target Hermes home (default: \$HERMES_HOME or ~/.hermes).
 
 Installed paths:
@@ -51,8 +44,6 @@ while [ $# -gt 0 ]; do
     --hermes-home)
       [ $# -ge 2 ] || die "missing value for --hermes-home"
       hermes_home="$2"; shift ;;
-    --enable-hooks) enable_hooks=1 ;;
-    --enable-plugin) enable_plugin=1 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument: $1" ;;
   esac
@@ -119,9 +110,8 @@ rm -rf "$share_dir.old"
 mv "$share_dir.new" "$share_dir"
 rm -rf "$share_dir.old"
 
-# Place the native plugin where Hermes discovers it. This only adds a symlink;
-# Hermes loads the plugin after `plugins.enabled` lists it, which install.sh
-# never edits. A foreign plugins/foundation is left untouched.
+# Place the native plugin where Hermes discovers it. A foreign
+# plugins/foundation is left untouched; Hermes CLI activation follows below.
 plugin_link="$hermes_home/plugins/foundation"
 plugin_target="../foundation/adapters/hermes/plugin"
 plugin_note="plugin : $plugin_link"
@@ -141,24 +131,12 @@ Installed foundation $installed_version
 
 EOF
 
-if [ "$enable_plugin" = "1" ]; then
-  command -v hermes >/dev/null 2>&1 || die "hermes CLI not found; install Hermes or enable the plugin with 'HERMES_HOME=$hermes_home hermes plugins enable foundation'"
-  HERMES_HOME="$hermes_home" hermes plugins enable foundation \
-    || die "enabling the native plugin failed (the install itself is complete)"
-fi
+command -v hermes >/dev/null 2>&1 || die "hermes CLI not found; installation completed but plugin could not be enabled"
+HERMES_HOME="$hermes_home" hermes plugins enable foundation \
+  || die "enabling the native plugin failed (the install itself is complete)"
 
-if [ "$enable_hooks" = "1" ]; then
-  # Opt-in only. Backs up config.yaml, appends a hooks block, approves exactly
-  # these hook commands in the allowlist. Never restarts Hermes.
-  "$bin_dir/foundation" enable --hermes-home "$hermes_home" --bin "$bin_dir/foundation" \
-    || die "enabling hooks failed (the install itself is complete)"
-else
-  cat <<EOF
+cat <<EOF
 The native plugin is enabled. No config.yaml, hook allowlist, or running gateway was changed.
-To enable all remaining shell hooks, re-run with --enable-hooks, or run:
-  $bin_dir/foundation enable
-To enable selectively, review $share_dir/adapters/hermes/hooks/INSTALL.md and copy
-only the entry you want from hooks.example.yaml. Use this command path:
-  $bin_dir/foundation
+To disable the plugin, run:
+  HERMES_HOME=$hermes_home hermes plugins disable foundation
 EOF
-fi

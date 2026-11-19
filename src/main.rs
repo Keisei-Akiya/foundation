@@ -147,7 +147,6 @@ mod cost_tracker;
 mod decide;
 mod desktop_notify;
 mod doc_warning;
-mod enable;
 mod evaluate_session;
 mod format_typecheck;
 mod gateguard;
@@ -176,10 +175,6 @@ fn main() {
     if all.first().map(String::as_str) == Some("version") {
         std::process::exit(version::run(&all[1..]));
     }
-    if all.first().map(String::as_str) == Some("enable") {
-        enable::run(&all[1..]);
-        return;
-    }
     if all.first().map(String::as_str) == Some("decide") {
         std::process::exit(decide::run(&all[1..]));
     }
@@ -194,7 +189,7 @@ fn main() {
     let command = args.next().unwrap_or_default();
     if args.next().is_some() || hook_ids::find_by_subcommand(&command).is_none() {
         eprintln!(
-            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|enable|decide|wiki-search|version>"
+            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|decide|wiki-search|version>"
         );
         std::process::exit(2);
     }

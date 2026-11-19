@@ -7,11 +7,9 @@
 新しい名前を付ける前に、それがプラグイン全体の名前か構成要素の名前かを区別する。
 配布物は `<HERMES_HOME>/bin/foundation` と `<HERMES_HOME>/foundation/` に、常にセットで配置する。
 Hermesのネイティブプラグイン定義は `adapters/hermes/plugin/`（`plugin.yaml` と `__init__.py`）にある。
-`install.sh` は `<HERMES_HOME>/plugins/foundation` から `<HERMES_HOME>/foundation/adapters/hermes/plugin` へのシンボリックリンクを置く。
-Hermesは `plugins.enabled` に `foundation` が載って初めて読み込む。
+`install.sh` は `<HERMES_HOME>/plugins/foundation` から `<HERMES_HOME>/foundation/adapters/hermes/plugin` へのシンボリックリンクを置き、Hermes CLIで常にプラグインを有効化する。
 プラグインは `register(ctx)` でフックを登録し、各コールバックが `foundation` バイナリをsubprocessで呼ぶ。
-`config.yaml` に登録するshell hooks方式も残っている。
-同じフックを両方で有効にしない。
+プラグインを無効にする場合は `hermes plugins disable foundation` を実行する。
 
 # 文章ルール
 

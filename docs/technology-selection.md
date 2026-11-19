@@ -81,9 +81,9 @@ Python 側で分岐を増やすと、shell hook 形式との挙動差が生ま�
 置かないもの：条件分岐が増えた判断。
 複雑になったら Rust に移す。
 
-### YAML（`plugin.yaml`、`hooks.example.yaml`、`.github/workflows/`）
+### YAML（`plugin.yaml`、`.github/workflows/`）
 
-担当：Hermes への plugin 宣言、shell hook の登録例、CI の定義。
+担当：Hermes への plugin 宣言、CI の定義。
 設定を書くだけで、ロジックは書かない。
 
 ### Markdown（`docs/`、`skills/`、`adapters/**/README.md`）

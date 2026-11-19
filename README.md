@@ -22,26 +22,10 @@ curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/instal
 - `<HERMES_HOME>/bin/foundation`
 - `<HERMES_HOME>/foundation/`（adapters、skills、docs、VERSION）
 
-インストーラーはネイティブpluginを既定で有効にする。
+インストーラーはHermes CLIを使ってネイティブpluginを有効にする。
 `config.yaml`、hook許可設定、起動中のgatewayは変更しない。
-shell hooksも有効にする場合だけ `--enable-hooks` を指定する。
-
-残るshell hooksを自動で有効にする場合は `--enable-hooks` を付ける（任意）。
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --enable-hooks
-```
-
-導入済みなら `<HERMES_HOME>/bin/foundation enable` だけでもよい。
-`--dry-run` を付けると変更内容の表示のみで書き込まない。
-`enable` は次の動作をする。
-
-- `config.yaml` を `config.yaml.bak-<時刻>` にバックアップしてから、末尾に `hooks:` ブロック（4件）を追記する。
-- `shell-hooks-allowlist.json` に同じ4件の `(event, command)` だけを承認として記録する。`hooks_auto_accept` は設定しない。
-- `config.yaml` に既に `hooks:` セクションがある場合は、その中へ不足している hook だけを追加する。既存の記述・コメントは変更しない。
-- `hooks:` が `*anchor` やリスト形式などで安全にマージできない場合は、何も変更せずに終了する。その場合は手動で `hooks.example.yaml` を反映する。
-- 何度実行しても結果は同じ（冪等）。gatewayの再起動は不要で、実行中のgatewayは約30秒で反映する。
-- 反映の確認は `hermes hooks doctor` で行う。
+Hermes CLIが見つからない場合は、配置を完了した後にエラーで停止する。
+プラグインを無効にする場合は `hermes plugins disable foundation` を実行する。
 
 Rustがある環境では次でも導入できる。この方式はバイナリのみを配置し、adapters等は含まない。
 
@@ -68,7 +52,7 @@ mise run test
 mise run check
 ```
 
-`mise run check`はRustテスト、Clippy、format checkを作業ツリーに対して非変更で実行する。残るHermes shell hooksは `adapters/hermes/hooks/hooks.example.yaml` を確認し、必要なentryのみ明示的に選択する。
+`mise run check`はRustテスト、Clippy、format checkを作業ツリーに対して非変更で実行する。
 Hermes実行環境がある場合は `HERMES_PYTHON=/path/to/hermes/python mise run runtime-test` で、隔離 `HERMES_HOME` におけるネイティブpluginのHermes hook dispatcher接続も検査する。手順と制約は `docs/runtime-testing.md` を参照。
 
 `mise run precommit`はヘルパーを作業ツリーからビルドして起動する。

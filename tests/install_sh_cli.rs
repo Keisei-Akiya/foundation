@@ -99,6 +99,12 @@ fn installs_archive_and_enables_hermes_plugin() {
 
     fs::create_dir_all(install_dir.join("bin")).unwrap();
     fs::create_dir_all(install_dir.join("foundation/obsolete")).unwrap();
+    fs::write(install_dir.join("config.yaml"), "plugins:\n  enabled: []\n").unwrap();
+    fs::write(
+        install_dir.join("shell-hooks-allowlist.json"),
+        "{\"allowlist\": []}\n",
+    )
+    .unwrap();
     fs::write(install_dir.join("bin/foundation"), "old binary\n").unwrap();
     fs::write(
         install_dir.join("foundation/obsolete/old.txt"),
@@ -162,4 +168,72 @@ fn installs_archive_and_enables_hermes_plugin() {
         fs::read_to_string(&hermes_log).unwrap(),
         "plugins\nenable\nfoundation\n"
     );
+    assert_eq!(
+        fs::read_to_string(install_dir.join("config.yaml")).unwrap(),
+        "plugins:\n  enabled: []\n"
+    );
+    assert_eq!(
+        fs::read_to_string(install_dir.join("shell-hooks-allowlist.json")).unwrap(),
+        "{\"allowlist\": []}\n"
+    );
+    assert!(stdout.contains("hermes plugins disable foundation"));
+
+    // Re-run with all installer utilities available except for Hermes itself.
+    let no_hermes_bin = root.join("no-hermes-bin");
+    fs::create_dir_all(&no_hermes_bin).unwrap();
+    for utility in [
+        "curl",
+        "tar",
+        "gzip",
+        "sha256sum",
+        "install",
+        "mktemp",
+        "uname",
+        "cat",
+        "mkdir",
+        "mv",
+        "rm",
+        "ln",
+        "sh",
+    ] {
+        let Some(path) = std::env::var_os("PATH").and_then(|paths| {
+            std::env::split_paths(&paths)
+                .map(|dir| dir.join(utility))
+                .find(|path| path.is_file())
+        }) else {
+            panic!("missing test utility {utility}");
+        };
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(path, no_hermes_bin.join(utility)).unwrap();
+    }
+    let missing_home = root.join("missing-hermes-home");
+    let missing = Command::new("sh")
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/install.sh"))
+        .args(["--hermes-home", missing_home.to_str().unwrap()])
+        .env("FOUNDATION_BASE_URL", &base_url)
+        .env("PATH", &no_hermes_bin)
+        .output()
+        .unwrap();
+    assert!(!missing.status.success());
+    let missing_stderr = String::from_utf8_lossy(&missing.stderr);
+    assert!(
+        missing_stderr.contains("hermes CLI not found"),
+        "unexpected missing-Hermes stderr: {missing_stderr}"
+    );
+    assert!(missing_home.join("bin/foundation").is_file());
+    assert!(missing_home.join("foundation/VERSION").is_file());
+}
+
+#[test]
+fn rejects_removed_enable_options() {
+    for option in ["--enable-hooks", "--enable-plugin"] {
+        let output = Command::new("sh")
+            .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/install.sh"))
+            .arg(option)
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{option} unexpectedly succeeded");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains(&format!("unknown argument: {option}")));
+    }
 }

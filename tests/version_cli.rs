@@ -42,6 +42,19 @@ fn write_version(home: &std::path::Path, version: &str) {
 }
 
 #[test]
+fn enable_is_rejected_as_an_unknown_subcommand() {
+    let output = Command::new(env!("CARGO_BIN_EXE_foundation"))
+        .arg("enable")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("usage: foundation <"));
+    assert!(!stderr.contains("foundation enable"));
+}
+
+#[test]
 fn prints_binary_and_shared_tree_versions_without_warning_when_equal() {
     let temp = TestDir::new();
     let home = temp.0.join("home");

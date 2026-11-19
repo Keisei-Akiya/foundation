@@ -169,7 +169,7 @@ mod tests {
 
     const MAIN_RS: &str = include_str!("main.rs");
     const INVENTORY: &str = include_str!("../adapters/hermes/hooks/INVENTORY.md");
-    const NON_HOOK_COMMANDS: &[&str] = &["enable", "decide", "version"];
+    const NON_HOOK_COMMANDS: &[&str] = &["decide", "version"];
 
     #[test]
     fn ids_and_command_names_are_unique() {
