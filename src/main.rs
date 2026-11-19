@@ -168,10 +168,14 @@ mod session_marker;
 mod state;
 mod stop_hookify;
 mod suggest_compact;
+mod version;
 mod wiki_search;
 
 fn main() {
     let all: Vec<String> = std::env::args().skip(1).collect();
+    if all.first().map(String::as_str) == Some("version") {
+        std::process::exit(version::run(&all[1..]));
+    }
     if all.first().map(String::as_str) == Some("enable") {
         enable::run(&all[1..]);
         return;
@@ -190,7 +194,7 @@ fn main() {
     let command = args.next().unwrap_or_default();
     if args.next().is_some() || hook_ids::find_by_subcommand(&command).is_none() {
         eprintln!(
-            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|enable|decide|wiki-search>"
+            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|enable|decide|wiki-search|version>"
         );
         std::process::exit(2);
     }
