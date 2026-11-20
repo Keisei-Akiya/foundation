@@ -22,8 +22,8 @@ curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/instal
 - `<HERMES_HOME>/bin/foundation`
 - `<HERMES_HOME>/foundation/`（adapters、skills、docs、VERSION）
 
-インストーラーはHermes CLIを使ってネイティブpluginを有効にする。
-`config.yaml`、hook許可設定、起動中のgatewayは変更しない。
+インストーラーはHermes CLIを使ってネイティブpluginを有効にし、`config.yaml` の `plugins.enabled` を更新する。
+それ以外の設定とhook許可設定は変更せず、起動中のgatewayも再起動しない。反映にはgatewayの再起動が必要である。
 Hermes CLIが見つからない場合は、配置を完了した後にエラーで停止する。
 プラグインを無効にする場合は `hermes plugins disable foundation` を実行する。
 

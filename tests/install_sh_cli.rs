@@ -92,14 +92,18 @@ fn installs_archive_and_enables_hermes_plugin() {
     let hermes = fake_bin.join("hermes");
     fs::write(
         &hermes,
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HERMES_TEST_LOG\"\nprintf 'fake hermes enabled\\n'\n",
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HERMES_TEST_LOG\"\nprintf 'plugins:\\n  enabled:\\n    - foundation\\nother-setting: preserved\\n' > \"$HERMES_HOME/config.yaml\"\nprintf 'fake hermes enabled\\n'\n",
     )
     .unwrap();
     checked_output("chmod", &["+x", hermes.to_str().unwrap()], root);
 
     fs::create_dir_all(install_dir.join("bin")).unwrap();
     fs::create_dir_all(install_dir.join("foundation/obsolete")).unwrap();
-    fs::write(install_dir.join("config.yaml"), "plugins:\n  enabled: []\n").unwrap();
+    fs::write(
+        install_dir.join("config.yaml"),
+        "plugins:\n  enabled: []\nother-setting: preserved\n",
+    )
+    .unwrap();
     fs::write(
         install_dir.join("shell-hooks-allowlist.json"),
         "{\"allowlist\": []}\n",
@@ -124,7 +128,7 @@ fn installs_archive_and_enables_hermes_plugin() {
         .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/install.sh"))
         .args(["--hermes-home", install_dir.to_str().unwrap()])
         .env("FOUNDATION_BASE_URL", &base_url)
-        .env("PATH", path)
+        .env("PATH", &path)
         .env("HERMES_TEST_LOG", &hermes_log)
         .output()
         .unwrap();
@@ -170,7 +174,7 @@ fn installs_archive_and_enables_hermes_plugin() {
     );
     assert_eq!(
         fs::read_to_string(install_dir.join("config.yaml")).unwrap(),
-        "plugins:\n  enabled: []\n"
+        "plugins:\n  enabled:\n    - foundation\nother-setting: preserved\n"
     );
     assert_eq!(
         fs::read_to_string(install_dir.join("shell-hooks-allowlist.json")).unwrap(),
@@ -222,6 +226,38 @@ fn installs_archive_and_enables_hermes_plugin() {
     );
     assert!(missing_home.join("bin/foundation").is_file());
     assert!(missing_home.join("foundation/VERSION").is_file());
+
+    let physical_home = root.join("physical-plugin-home");
+    let physical_plugin = physical_home.join("plugins/foundation");
+    fs::create_dir_all(&physical_plugin).unwrap();
+    fs::write(
+        physical_plugin.join("owned.txt"),
+        "leave this plugin alone\n",
+    )
+    .unwrap();
+    let physical_before = fs::read(physical_plugin.join("owned.txt")).unwrap();
+    let physical_log = root.join("physical-hermes-args");
+    let physical = Command::new("sh")
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/install.sh"))
+        .args(["--hermes-home", physical_home.to_str().unwrap()])
+        .env("FOUNDATION_BASE_URL", &base_url)
+        .env("PATH", &path)
+        .env("HERMES_TEST_LOG", &physical_log)
+        .output()
+        .unwrap();
+    assert!(!physical.status.success());
+    let physical_stderr = String::from_utf8_lossy(&physical.stderr);
+    assert!(
+        physical_stderr.contains("not a symlink")
+            || physical_stderr.contains("not a symbolic link"),
+        "unexpected physical-plugin stderr: {physical_stderr}"
+    );
+    assert_eq!(
+        fs::read(physical_plugin.join("owned.txt")).unwrap(),
+        physical_before
+    );
+    assert!(!physical_log.exists(), "Hermes CLI must not be called");
+    assert!(physical_home.join("foundation/VERSION").is_file());
 }
 
 #[test]

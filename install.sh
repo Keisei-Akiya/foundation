@@ -5,8 +5,9 @@
 #   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version 0.0.18
 #
 # Downloads the prebuilt release from GitHub Releases, verifies its SHA256, then
-# installs into <HERMES_HOME>. It never edits config.yaml or hook allowlists and
-# never restarts Hermes. The native plugin is always enabled.
+# installs into <HERMES_HOME>. Hermes CLI updates only config.yaml's plugins.enabled
+# entry; hook allowlists are untouched and Hermes is never restarted.
+# The native plugin is always enabled.
 set -eu
 
 REPO="Keisei-Akiya/foundation"
@@ -115,11 +116,13 @@ rm -rf "$share_dir.old"
 plugin_link="$hermes_home/plugins/foundation"
 plugin_target="../foundation/adapters/hermes/plugin"
 plugin_note="plugin : $plugin_link"
+plugin_conflict=0
 if [ -L "$plugin_link" ] || [ ! -e "$plugin_link" ]; then
   mkdir -p "$hermes_home/plugins"
   ln -sfn "$plugin_target" "$plugin_link"
 else
   plugin_note="plugin : skipped ($plugin_link already exists and is not a symlink)"
+  plugin_conflict=1
 fi
 
 cat <<EOF
@@ -131,12 +134,13 @@ Installed foundation $installed_version
 
 EOF
 
+[ "$plugin_conflict" -eq 0 ] || die "installation completed but $plugin_link already exists and is not a symlink; refusing to enable the native plugin"
 command -v hermes >/dev/null 2>&1 || die "hermes CLI not found; installation completed but plugin could not be enabled"
 HERMES_HOME="$hermes_home" hermes plugins enable foundation \
   || die "enabling the native plugin failed (the install itself is complete)"
 
 cat <<EOF
-The native plugin is enabled. No config.yaml, hook allowlist, or running gateway was changed.
+The native plugin is enabled. Hermes CLI updated only config.yaml's plugins.enabled entry; the hook allowlist and running gateway were not changed. Restart the gateway to apply the plugin change.
 To disable the plugin, run:
   HERMES_HOME=$hermes_home hermes plugins disable foundation
 EOF

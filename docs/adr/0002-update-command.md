@@ -50,7 +50,8 @@ foundation はプラグインとして使う前提であり、有効化は導入
 
 フックの実体（`preflight`、`hookify` など）は、プラグインが呼び出すため残す。
 
-`config.yaml`、allowlist、gateway には触れない。
+`hermes plugins enable foundation` は Hermes CLI に `config.yaml` の `plugins.enabled` を更新させる。
+それ以外の設定と allowlist は変更せず、gateway も再起動しない。反映には gateway の再起動が必要である。
 
 ### 5. ロールバックを作らない
 
