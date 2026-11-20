@@ -193,7 +193,7 @@ fn main() {
     let command = args.next().unwrap_or_default();
     if args.next().is_some() || hook_ids::find_by_subcommand(&command).is_none() {
         eprintln!(
-            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|decide|wiki-search|version|update>"
+            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|decide|wiki-search|version|update [--check|--version X.Y.Z] [--hermes-home DIR]>"
         );
         std::process::exit(2);
     }
