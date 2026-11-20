@@ -147,15 +147,31 @@ fn parse_args(args: &[String]) -> Result<(bool, Option<String>, PathBuf), String
 }
 
 fn fetch_and_run_installer(version: &str, home: &std::path::Path) -> Result<(), String> {
-    let base = env::var("FOUNDATION_INSTALLER_BASE_URL")
-        .unwrap_or_else(|_| "https://raw.githubusercontent.com/Keisei-Akiya/foundation".into());
-    let url = format!("{}/v{version}/install.sh", base.trim_end_matches('/'));
-    if !url.starts_with("https://")
-        && !url.starts_with("http://127.0.0.1:")
-        && !url.starts_with("http://localhost:")
-    {
-        return Err(format!("installer URL must use HTTPS: {url}"));
+    let installer_base = env::var("FOUNDATION_INSTALLER_BASE_URL").ok();
+    let base = installer_base
+        .as_deref()
+        .unwrap_or("https://raw.githubusercontent.com/Keisei-Akiya/foundation");
+    if let Some(base) = installer_base.as_deref() {
+        let parsed = url::Url::parse(base)
+            .map_err(|error| format!("invalid installer base URL {base}: {error}"))?;
+        let loopback = match parsed.host() {
+            Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
+            Some(url::Host::Ipv4(address)) => address.is_loopback(),
+            Some(url::Host::Ipv6(address)) => address.is_loopback(),
+            None => false,
+        };
+        if !loopback {
+            return Err(format!(
+                "installer base URL must use a loopback host when overridden: {base}"
+            ));
+        }
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return Err(format!(
+                "installer base URL must not contain credentials: {base}"
+            ));
+        }
     }
+    let url = format!("{}/v{version}/install.sh", base.trim_end_matches('/'));
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
         .max_redirects(0)
@@ -176,6 +192,11 @@ fn fetch_and_run_installer(version: &str, home: &std::path::Path) -> Result<(), 
         return Err(format!(
             "installer download failed for {url}: HTTP {status}: {}",
             String::from_utf8_lossy(&body).trim()
+        ));
+    }
+    if String::from_utf8_lossy(&body).trim().is_empty() {
+        return Err(format!(
+            "installer download returned an empty body from {url}"
         ));
     }
     let temp = env::temp_dir().join(format!(
@@ -268,10 +289,14 @@ pub fn run(args: &[String]) -> i32 {
             }
         };
     }
+    let explicit_version = requested.is_some();
     let target = requested.unwrap_or(latest);
     let matches = shared.as_deref() == Some(BINARY_VERSION);
     match update_available(&target, BINARY_VERSION, shared.as_deref()) {
-        Ok(false) if matches => {
+        Ok(false)
+            if (explicit_version && BINARY_VERSION == target && matches)
+                || (!explicit_version && matches) =>
+        {
             println!("最新です (version {target})");
             return 0;
         }

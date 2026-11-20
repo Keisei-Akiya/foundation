@@ -132,6 +132,18 @@ fn updates_latest_via_tag_script_and_passes_home() {
     assert_eq!(before, snapshot(&h));
 }
 #[test]
+fn explicit_version_downgrades_when_both_installed_versions_are_newer() {
+    let t = Temp::new();
+    let h = t.0.join("home");
+    let r = t.0.join("args");
+    write_version(&h, env!("CARGO_PKG_VERSION"));
+    let (u, s) = serve(vec![sh(&r, "200 OK", 0)]);
+    let o = run(&h, &u, &r, &["--version", "0.0.1"]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(r.exists());
+    assert_eq!(s.join().unwrap(), ["GET /raw/v0.0.1/install.sh HTTP/1.1"]);
+}
+#[test]
 fn explicit_version_uses_requested_tag() {
     let t = Temp::new();
     let h = t.0.join("home");
@@ -145,6 +157,19 @@ fn explicit_version_uses_requested_tag() {
         fs::read_to_string(r).unwrap(),
         format!("--version\n1.2.3\n--hermes-home\n{}\n", h.display())
     );
+}
+#[test]
+fn explicit_matching_version_skips_installer() {
+    let t = Temp::new();
+    let h = t.0.join("home");
+    let r = t.0.join("args");
+    write_version(&h, env!("CARGO_PKG_VERSION"));
+    let (u, s) = serve(vec![]);
+    let o = run(&h, &u, &r, &["--version", env!("CARGO_PKG_VERSION")]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("最新です"));
+    assert!(!r.exists());
+    assert!(s.join().unwrap().is_empty());
 }
 #[test]
 fn matching_latest_skips_install_and_mismatch_reinstalls() {
@@ -187,6 +212,60 @@ fn missing_release_fails_without_touching_home() {
     assert_eq!(before, snapshot(&h));
     assert!(!r.exists());
     assert_eq!(s.join().unwrap(), ["GET /raw/v9.9.9/install.sh HTTP/1.1"]);
+}
+#[test]
+fn rejects_non_loopback_installer_host_before_connecting() {
+    let t = Temp::new();
+    let h = t.0.join("home");
+    let r = t.0.join("args");
+    for base in [
+        "http://127.0.0.1.evil.example",
+        "http://localhost@evil.example",
+        "https://attacker.example",
+    ] {
+        let o = Command::new(env!("CARGO_BIN_EXE_foundation"))
+            .args(["update", "--version", "1.2.3", "--hermes-home"])
+            .arg(&h)
+            .env("HOME", &h)
+            .env("FOUNDATION_INSTALLER_BASE_URL", base)
+            .env("FOUNDATION_TEST_RECORD", &r)
+            .output()
+            .unwrap();
+        assert!(!o.status.success(), "accepted {base}");
+        assert!(String::from_utf8_lossy(&o.stderr).contains("loopback"));
+        assert!(!r.exists());
+        assert!(snapshot(&h).is_empty());
+    }
+}
+#[test]
+fn empty_installer_body_fails_without_running_or_success_output() {
+    let t = Temp::new();
+    let h = t.0.join("home");
+    let r = t.0.join("args");
+    write_version(&h, "0.0.20");
+    fs::write(h.join("config.yaml"), "sentinel").unwrap();
+    let before = snapshot(&h);
+    let (u, s) = serve(vec![("200 OK", "  \n\t".into())]);
+    let o = run(&h, &u, &r, &["--version", "1.2.3"]);
+    assert!(!o.status.success());
+    assert!(String::from_utf8_lossy(&o.stderr).contains("empty"));
+    let stdout = String::from_utf8_lossy(&o.stdout);
+    assert!(!stdout.contains("gateway の再起動が必要"));
+    assert!(!stdout.contains("更新が完了しました"));
+    assert!(!r.exists());
+    assert_eq!(before, snapshot(&h));
+    assert_eq!(s.join().unwrap(), ["GET /raw/v1.2.3/install.sh HTTP/1.1"]);
+}
+#[test]
+fn check_and_version_together_are_rejected_without_network() {
+    let t = Temp::new();
+    let h = t.0.join("home");
+    let r = t.0.join("args");
+    let (u, s) = serve(vec![]);
+    let o = run(&h, &u, &r, &["--check", "--version", "1.2.3"]);
+    assert!(!o.status.success());
+    assert!(String::from_utf8_lossy(&o.stderr).contains("unknown update argument: --version"));
+    assert!(s.join().unwrap().is_empty());
 }
 #[test]
 fn api_and_installer_failures_and_bad_version_are_reported() {
