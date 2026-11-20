@@ -63,27 +63,26 @@ pub fn resolve_latest_tag() -> Result<String, String> {
         .get("tag_name")
         .and_then(Value::as_str)
         .filter(|tag| !tag.trim().is_empty())
-        .map(|tag| tag.trim().trim_start_matches('v').to_string())
+        .map(|tag| -> Result<String, String> {
+            version_segments(tag)?;
+            Ok(tag.strip_prefix('v').unwrap_or(tag).to_string())
+        })
+        .transpose()?
         .ok_or_else(|| "release API response is missing a string tag_name".to_string())
 }
 
 fn version_segments(version: &str) -> Result<Vec<u64>, String> {
-    let version = version.trim().trim_start_matches('v');
-    let parts: Vec<u64> = version
-        .split('.')
-        .map(|part| {
-            let digits: String = part.chars().take_while(char::is_ascii_digit).collect();
-            if digits.is_empty() {
-                Err(format!("invalid version: {version}"))
-            } else {
-                digits
-                    .parse()
-                    .map_err(|_| format!("invalid version: {version}"))
-            }
-        })
-        .collect::<Result<_, _>>()?;
+    let invalid = || format!("invalid version: {version}");
+    let version = version.strip_prefix('v').unwrap_or(version);
+    let mut parts = Vec::new();
+    for part in version.split('.') {
+        if part.is_empty() || !part.chars().all(|character| character.is_ascii_digit()) {
+            return Err(invalid());
+        }
+        parts.push(part.parse().map_err(|_| invalid())?);
+    }
     if parts.is_empty() {
-        return Err(format!("invalid version: {version}"));
+        return Err(invalid());
     }
     Ok(parts)
 }

@@ -136,6 +136,17 @@ fn reports_up_to_date_and_warns_on_binary_shared_tree_mismatch() {
     assert!(output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr)
         .contains("Warning: binary version 0.0.23 does not match shared tree version 0.0.22"));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Update available"));
+}
+
+#[test]
+fn rejects_prerelease_tags_with_a_cause_and_nonzero_exit() {
+    let temp = TestDir::new();
+    let home = temp.0.join("home");
+    write_version(&home, "0.0.23");
+    let output = run(&home, &serve("200 OK", r#"{"tag_name":"1.2.3-rc.1"}"#));
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid version: 1.2.3-rc.1"));
 }
 
 #[test]
