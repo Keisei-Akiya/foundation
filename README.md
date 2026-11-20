@@ -16,7 +16,7 @@ GitHub Releases のビルド済み成果物を取得し、SHA256を検証して�
 curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
 ```
 
-バージョンを固定する場合は `sh -s -- --version 0.0.18` を付ける。
+バージョンを固定する場合は `sh -s -- --version 0.0.24` を付ける。
 配置先は次のとおり。
 
 - `<HERMES_HOME>/bin/foundation`
@@ -52,7 +52,7 @@ foundation update
 特定の版へ更新するには `--version X.Y.Z` を指定する。指定した版が存在しない場合はインストーラーの取得が失敗し、エラーで終了する。既存のバイナリや共有ツリーはその場合変更されない。新しい版から以前の版へ戻す（ダウングレードする）場合も同じ指定を使う。
 
 ```sh
-foundation update --version 0.0.18
+foundation update --version 0.0.24
 ```
 
 `version` と `update` の対象 Hermes home は、`--hermes-home DIR`、環境変数 `HERMES_HOME`、既定の `~/.hermes` の順で決まる。別のプロファイルを対象にする場合は、次のように両コマンドで指定する。
