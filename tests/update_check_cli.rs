@@ -97,7 +97,7 @@ fn reports_update_available_and_does_not_change_hermes_home() {
     let home = temp.0.join("home");
     write_version(&home, "0.0.20");
     let before = snapshot(&home);
-    let url = serve("200 OK", r#"{"tag_name":"v0.0.24"}"#);
+    let url = serve("200 OK", r#"{"tag_name":"v9.9.9"}"#);
     let output = run(&home, &url);
     assert!(
         output.status.success(),
@@ -105,8 +105,8 @@ fn reports_update_available_and_does_not_change_hermes_home() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("Latest version: 0.0.24"));
-    assert!(stdout.contains("Binary version: 0.0.23"));
+    assert!(stdout.contains("Latest version: 9.9.9"));
+    assert!(stdout.contains(&format!("Binary version: {}", env!("CARGO_PKG_VERSION"))));
     assert!(stdout.contains("Shared tree version: 0.0.20"));
     assert!(stdout.contains("Update available"));
     assert_eq!(before, snapshot(&home));
@@ -116,8 +116,9 @@ fn reports_update_available_and_does_not_change_hermes_home() {
 fn reports_up_to_date_and_warns_on_binary_shared_tree_mismatch() {
     let temp = TestDir::new();
     let home = temp.0.join("home");
-    write_version(&home, "0.0.23");
-    let url = serve("200 OK", r#"{"tag_name":"v0.0.23"}"#);
+    let bin = env!("CARGO_PKG_VERSION");
+    write_version(&home, bin);
+    let url = serve("200 OK", &format!(r#"{{"tag_name":"v{bin}"}}"#));
     let output = run(&home, &url);
     assert!(output.status.success());
     assert!(String::from_utf8(output.stdout)
@@ -125,17 +126,18 @@ fn reports_up_to_date_and_warns_on_binary_shared_tree_mismatch() {
         .contains("Already up to date"));
     assert!(output.stderr.is_empty());
 
-    let url = serve("200 OK", r#"{"tag_name":"v0.0.22"}"#);
+    let url = serve("200 OK", r#"{"tag_name":"v0.0.1"}"#);
     let output = run(&home, &url);
     assert!(output.status.success());
     assert!(String::from_utf8_lossy(&output.stdout).contains("Already up to date"));
 
-    write_version(&home, "0.0.22");
-    let url = serve("200 OK", r#"{"tag_name":"v0.0.23"}"#);
+    write_version(&home, "0.0.1");
+    let url = serve("200 OK", &format!(r#"{{"tag_name":"v{bin}"}}"#));
     let output = run(&home, &url);
     assert!(output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("Warning: binary version 0.0.23 does not match shared tree version 0.0.22"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains(&format!(
+        "Warning: binary version {bin} does not match shared tree version 0.0.1"
+    )));
     assert!(String::from_utf8_lossy(&output.stdout).contains("Update available"));
 }
 
