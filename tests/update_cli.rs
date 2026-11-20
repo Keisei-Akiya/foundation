@@ -49,7 +49,13 @@ fn snapshot(p: &Path) -> Vec<(PathBuf, Vec<u8>)> {
     v
 }
 fn serve(responses: Vec<(&'static str, String)>) -> (String, thread::JoinHandle<Vec<String>>) {
-    let l = TcpListener::bind("127.0.0.1:0").unwrap();
+    serve_on("127.0.0.1:0", responses)
+}
+fn serve_on(
+    address: &str,
+    responses: Vec<(&'static str, String)>,
+) -> (String, thread::JoinHandle<Vec<String>>) {
+    let l = TcpListener::bind(address).unwrap();
     let addr = l.local_addr().unwrap();
     let t = thread::spawn(move || {
         let mut paths = vec![];
@@ -292,4 +298,105 @@ fn api_and_installer_failures_and_bad_version_are_reported() {
     assert!(!o.status.success());
     assert!(String::from_utf8_lossy(&o.stderr).contains("invalid version: 1.2"));
     assert!(s.join().unwrap().is_empty());
+}
+
+#[test]
+fn rejects_userinfo_and_fragment_host_spoofing_before_connecting() {
+    let t = Temp::new();
+    let h = t.0.join("home");
+    let r = t.0.join("args");
+    for base in [
+        "http://localhost@evil.example",
+        "http://evil.example#@127.0.0.1",
+    ] {
+        let o = Command::new(env!("CARGO_BIN_EXE_foundation"))
+            .args(["update", "--version", "1.2.3", "--hermes-home"])
+            .arg(&h)
+            .env("HOME", &h)
+            .env("FOUNDATION_INSTALLER_BASE_URL", base)
+            .env("FOUNDATION_TEST_RECORD", &r)
+            .output()
+            .unwrap();
+        assert!(!o.status.success(), "accepted {base}");
+        assert!(String::from_utf8_lossy(&o.stderr).contains("loopback"));
+        assert!(!r.exists());
+        assert!(snapshot(&h).is_empty());
+    }
+}
+
+#[test]
+fn localhost_case_is_accepted_but_trailing_dot_is_rejected() {
+    let t = Temp::new();
+    let h = t.0.join("home");
+    let r = t.0.join("args");
+    let (u, s) = serve(vec![sh(&r, "200 OK", 0)]);
+    let port = u.rsplit(':').next().unwrap();
+    let base = format!("http://LOCALHOST:{port}/raw");
+    let o = Command::new(env!("CARGO_BIN_EXE_foundation"))
+        .args(["update", "--version", "1.2.3", "--hermes-home"])
+        .arg(&h)
+        .env("HOME", &h)
+        .env("FOUNDATION_INSTALLER_BASE_URL", &base)
+        .env("FOUNDATION_TEST_RECORD", &r)
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(s.join().unwrap(), ["GET /raw/v1.2.3/install.sh HTTP/1.1"]);
+
+    let (u, s) = serve(vec![]);
+    let port = u.rsplit(':').next().unwrap();
+    let base = format!("http://Localhost.:{port}/raw");
+    let o = Command::new(env!("CARGO_BIN_EXE_foundation"))
+        .args(["update", "--version", "1.2.3", "--hermes-home"])
+        .arg(&h)
+        .env("HOME", &h)
+        .env("FOUNDATION_INSTALLER_BASE_URL", &base)
+        .env("FOUNDATION_TEST_RECORD", &r)
+        .output()
+        .unwrap();
+    assert!(!o.status.success());
+    assert!(String::from_utf8_lossy(&o.stderr).contains("loopback"));
+    assert!(s.join().unwrap().is_empty());
+}
+
+#[test]
+fn ipv6_loopback_installer_host_passes_host_validation() {
+    let t = Temp::new();
+    let h = t.0.join("home");
+    let r = t.0.join("args");
+    let base = "http://[::1]:1/raw";
+    let o = Command::new(env!("CARGO_BIN_EXE_foundation"))
+        .args(["update", "--version", "1.2.3", "--hermes-home"])
+        .arg(&h)
+        .env("HOME", &h)
+        .env("FOUNDATION_INSTALLER_BASE_URL", base)
+        .env("FOUNDATION_TEST_RECORD", &r)
+        .output()
+        .unwrap();
+    assert!(!o.status.success());
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(stderr.contains("installer download failed"), "{stderr}");
+    assert!(!stderr.contains("loopback"), "{stderr}");
+    assert!(snapshot(&h).is_empty());
+}
+
+#[test]
+fn installer_redirect_to_external_host_is_not_followed() {
+    let t = Temp::new();
+    let h = t.0.join("home");
+    let r = t.0.join("args");
+    let redirect = "302 Found\r\nLocation: http://evil.example/install.sh";
+    let (u, s) = serve(vec![(redirect, String::new())]);
+    let base = format!("{u}/raw");
+    let o = Command::new(env!("CARGO_BIN_EXE_foundation"))
+        .args(["update", "--version", "1.2.3", "--hermes-home"])
+        .arg(&h)
+        .env("HOME", &h)
+        .env("FOUNDATION_INSTALLER_BASE_URL", &base)
+        .env("FOUNDATION_TEST_RECORD", &r)
+        .output()
+        .unwrap();
+    assert!(!o.status.success());
+    assert!(String::from_utf8_lossy(&o.stderr).contains("HTTP 302"));
+    assert_eq!(s.join().unwrap(), ["GET /raw/v1.2.3/install.sh HTTP/1.1"]);
 }
