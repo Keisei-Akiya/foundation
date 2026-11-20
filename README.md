@@ -16,32 +16,54 @@ GitHub Releases のビルド済み成果物を取得し、SHA256を検証して�
 curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
 ```
 
-バージョンを固定する場合は `sh -s -- --version 0.0.18` を付ける。
+バージョンを固定する場合は `sh -s -- --version 0.0.24` を付ける。
 配置先は次のとおり。
 
 - `<HERMES_HOME>/bin/foundation`
 - `<HERMES_HOME>/foundation/`（adapters、skills、docs、VERSION）
 
-インストーラーはネイティブpluginを既定で有効にする。
-`config.yaml`、hook許可設定、起動中のgatewayは変更しない。
-shell hooksも有効にする場合だけ `--enable-hooks` を指定する。
+インストーラーはHermes CLIを使ってネイティブpluginを有効にし、`config.yaml` の `plugins.enabled` を更新する。
+それ以外の設定とhook許可設定は変更せず、起動中のgatewayも再起動しない。反映にはgatewayの再起動が必要である。
+Hermes CLIが見つからない場合は、配置を完了した後にエラーで停止する。
+プラグインを無効にする場合は `hermes plugins disable foundation` を実行する。
 
-残るshell hooksを自動で有効にする場合は `--enable-hooks` を付ける（任意）。
+## バージョン確認と更新
+
+導入済みのバイナリと共有ツリーの版は、`foundation version` で確認する。このコマンドはネットワークに接続しない。共有ツリーの `VERSION` ファイルが無い場合は、その版を `unavailable (VERSION file not found)` と表示する。
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --enable-hooks
+foundation version
 ```
 
-導入済みなら `<HERMES_HOME>/bin/foundation enable` だけでもよい。
-`--dry-run` を付けると変更内容の表示のみで書き込まない。
-`enable` は次の動作をする。
+最新版への更新の要否は `foundation update --check` で確認する。最新の版、バイナリの版、共有ツリーの版、および `Update available` または `Already up to date` が表示される。更新があっても終了コードは 0 であり、このコマンドはファイルを変更しない。
 
-- `config.yaml` を `config.yaml.bak-<時刻>` にバックアップしてから、末尾に `hooks:` ブロック（4件）を追記する。
-- `shell-hooks-allowlist.json` に同じ4件の `(event, command)` だけを承認として記録する。`hooks_auto_accept` は設定しない。
-- `config.yaml` に既に `hooks:` セクションがある場合は、その中へ不足している hook だけを追加する。既存の記述・コメントは変更しない。
-- `hooks:` が `*anchor` やリスト形式などで安全にマージできない場合は、何も変更せずに終了する。その場合は手動で `hooks.example.yaml` を反映する。
-- 何度実行しても結果は同じ（冪等）。gatewayの再起動は不要で、実行中のgatewayは約30秒で反映する。
-- 反映の確認は `hermes hooks doctor` で行う。
+```sh
+foundation update --check
+```
+
+最新版へ更新するには、次を実行する。
+
+```sh
+foundation update
+```
+
+すでに最新で、バイナリと共有ツリーの版も一致している場合は `最新です (version X.Y.Z)` と表示して何も変更しない。更新が成功すると `更新が完了しました。gateway の再起動が必要です。` と表示する。更新コマンドは gateway を再起動しないため、更新を反映するには利用者が gateway を再起動する必要がある。
+
+特定の版へ更新するには `--version X.Y.Z` を指定する。指定した版が存在しない場合はインストーラーの取得が失敗し、エラーで終了する。既存のバイナリや共有ツリーはその場合変更されない。新しい版から以前の版へ戻す（ダウングレードする）場合も同じ指定を使う。
+
+```sh
+foundation update --version 0.0.24
+```
+
+`version` と `update` の対象 Hermes home は、`--hermes-home DIR`、環境変数 `HERMES_HOME`、既定の `~/.hermes` の順で決まる。別のプロファイルを対象にする場合は、次のように両コマンドで指定する。
+
+```sh
+foundation version --hermes-home /path/to/hermes-home
+foundation update --check --hermes-home /path/to/hermes-home
+foundation update --hermes-home /path/to/hermes-home
+```
+
+リリース後に実物で一度だけ確認する手順は、[実リリース向け手動スモークチェックリスト](docs/update-release-smoke-checklist.md) を参照する。
 
 Rustがある環境では次でも導入できる。この方式はバイナリのみを配置し、adapters等は含まない。
 
@@ -68,7 +90,7 @@ mise run test
 mise run check
 ```
 
-`mise run check`はRustテスト、Clippy、format checkを作業ツリーに対して非変更で実行する。残るHermes shell hooksは `adapters/hermes/hooks/hooks.example.yaml` を確認し、必要なentryのみ明示的に選択する。
+`mise run check`はRustテスト、Clippy、format checkを作業ツリーに対して非変更で実行する。
 Hermes実行環境がある場合は `HERMES_PYTHON=/path/to/hermes/python mise run runtime-test` で、隔離 `HERMES_HOME` におけるネイティブpluginのHermes hook dispatcher接続も検査する。手順と制約は `docs/runtime-testing.md` を参照。
 
 `mise run precommit`はヘルパーを作業ツリーからビルドして起動する。

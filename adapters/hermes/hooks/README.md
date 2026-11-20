@@ -1,6 +1,6 @@
 # Hermes hooks (Rust)
 
-Build the executable with `cargo build --release`. The executable reads one JSON object from stdin (maximum 1 MiB). Hook commands in `hooks.example.yaml` are argv: the binary path is one quoted argument and the Rust subcommand is the next argument. The examples are opt-in and are not installed into Hermes configuration automatically.
+Build the executable with `cargo build --release`. The executable reads one JSON object from stdin (maximum 1 MiB).
 
 | Subcommand | Event and behavior | Output/limits |
 |---|---|---|

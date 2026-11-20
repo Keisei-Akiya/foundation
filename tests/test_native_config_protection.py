@@ -203,17 +203,14 @@ class NativeConfigProtectionTests(unittest.TestCase):
 
 
 class NativePluginMigrationTests(unittest.TestCase):
-    def test_shell_hook_enablement_does_not_register_config_protection(self):
-        enable_source = (REPO_ROOT / "src/enable.rs").read_text(encoding="utf-8")
-        self.assertNotIn('sub: "config-protection"', enable_source)
-
     def test_legacy_config_protection_shell_installer_is_removed(self):
         self.assertFalse((REPO_ROOT / "adapters/hermes/hooks/install-config-protection.sh").exists())
 
     def test_installer_can_enable_the_native_plugin_with_hermes(self):
         installer = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
-        self.assertIn("--enable-plugin", installer)
         self.assertIn("hermes plugins enable foundation", installer)
+        self.assertNotIn("--enable-plugin", installer)
+        self.assertNotIn("--enable-hooks", installer)
 
 
 if __name__ == "__main__":
