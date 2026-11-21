@@ -1,0 +1,40 @@
+[
+  {
+    "name": "proposal",
+    "type": "predicate",
+    "instructions": "previous_ai_message に、ユーザーの承認・選択・返事を求める提案が含まれるか。previous_ai_message が null の場合は含まない。"
+  },
+  {
+    "name": "reply",
+    "type": "choice",
+    "instructions": "previous_ai_message の提案に対して、user_message が返事をしているかを選ぶ。提案がない場合は none を選ぶ。",
+    "choices": [
+      {
+        "value": "approve",
+        "description": "提案をそのまま承認している"
+      },
+      {
+        "value": "revise",
+        "description": "提案を一部修正したうえで、または条件を付けて受け入れている"
+      },
+      {
+        "value": "decline",
+        "description": "提案を断っている"
+      },
+      {
+        "value": "none",
+        "description": "提案への返事を含まない"
+      }
+    ]
+  },
+  {
+    "name": "new_task",
+    "type": "predicate",
+    "instructions": "user_message に、新しい作業を依頼する内容を含むか。"
+  },
+  {
+    "name": "discuss",
+    "type": "predicate",
+    "instructions": "user_message に、検討・相談（一緒に考えたい、意見がほしい）を含むか。"
+  }
+]
