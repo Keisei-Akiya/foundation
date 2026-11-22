@@ -65,9 +65,8 @@ echo '{"previous_ai_message": "対応方針を2案出しました。", "user_mes
 
 - `low_confidence`: `new_task` か `standing_rule` の確率が `0.35` 以上 `0.65` 以下（両端を含む）。
 - `undecidable`: Jev に届かない、応答が JSON でない、フラグが欠けている、確率が範囲外。
-- 次のどちらかに対応する。
-  - 発話の意図を人間に確認する。
-  - 発話を自分で解釈して進めるときは、解釈を明示し、取り違えに気づけるようにする。
+- 人間に発話の意図を確認する。
+  確認が済むまで、発話を自分で解釈して作業や承認を進めない（fail closed。`docs/adr/0003-intake-hint.md`）。
 - `route: "human"` のときに `instruction` や `reply` はない。hint の値があるかのように扱わない。
 
 ## hint の使い方
