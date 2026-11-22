@@ -12,7 +12,10 @@ use std::{
 const TIMEOUT: Duration = Duration::from_secs(8);
 
 fn home(name: &str) -> std::path::PathBuf {
-    let p = std::env::temp_dir().join(format!("foundation-hint-{name}-{}", std::process::id()));
+    // テストは並列に走るので、呼び出しごとに別のディレクトリを使う。
+    static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let p = std::env::temp_dir().join(format!("foundation-hint-{name}-{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(p.join(".hermes")).unwrap();
     p
