@@ -1,24 +1,17 @@
 //! `foundation intake-hint` の外から見える振る舞い。Jev はモックサーバで代用する。
 //! 発話は合成の短文だけを使う（実発話は置かない）。
+
+mod common;
+
+use common::{accept, reply};
 use serde_json::{json, Value};
 use std::{
-    io::{Read, Write},
     net::{TcpListener, TcpStream},
-    process::{Command, Stdio},
     thread,
-    time::{Duration, Instant},
 };
 
-const TIMEOUT: Duration = Duration::from_secs(8);
-
 fn home(name: &str) -> std::path::PathBuf {
-    // テストは並列に走るので、呼び出しごとに別のディレクトリを使う。
-    static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let p = std::env::temp_dir().join(format!("foundation-hint-{name}-{}-{n}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&p);
-    std::fs::create_dir_all(p.join(".hermes")).unwrap();
-    p
+    common::home("hint", name)
 }
 
 fn run(
@@ -27,92 +20,11 @@ fn run(
     envs: &[(&str, &str)],
     h: &std::path::Path,
 ) -> (i32, String, String) {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_foundation"));
-    c.arg("intake-hint")
-        .args(args)
-        .env("HOME", h)
-        .env_remove("HERMES_HOME")
-        .env_remove("TYPESAFE_API_KEY")
-        .env_remove("TYPESAFE_BASE_URL")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    for (k, v) in envs {
-        c.env(k, v);
-    }
-    let mut ch = c.spawn().unwrap();
-    if let Err(e) = ch.stdin.take().unwrap().write_all(stdin.as_bytes()) {
-        assert_eq!(
-            e.kind(),
-            std::io::ErrorKind::BrokenPipe,
-            "stdin write failed: {e}"
-        );
-    }
-    let end = Instant::now() + TIMEOUT;
-    loop {
-        if ch.try_wait().unwrap().is_some() {
-            let o = ch.wait_with_output().unwrap();
-            return (
-                o.status.code().unwrap_or(-1),
-                String::from_utf8_lossy(&o.stdout).into(),
-                String::from_utf8_lossy(&o.stderr).into(),
-            );
-        }
-        if Instant::now() >= end {
-            let _ = ch.kill();
-            let _ = ch.wait();
-            panic!("CLI timed out after {TIMEOUT:?}");
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-}
-
-fn accept(l: &TcpListener) -> TcpStream {
-    l.set_nonblocking(true).unwrap();
-    let end = Instant::now() + TIMEOUT;
-    loop {
-        match l.accept() {
-            Ok((s, _)) => return s,
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                assert!(Instant::now() < end, "mock server timed out accepting");
-                thread::sleep(Duration::from_millis(10));
-            }
-            Err(e) => panic!("accept failed: {e}"),
-        }
-    }
+    common::run("intake-hint", args, stdin, envs, h)
 }
 
 fn request(s: &mut TcpStream) -> Value {
-    s.set_read_timeout(Some(TIMEOUT)).unwrap();
-    let mut b = Vec::new();
-    let mut x = [0];
-    while !b.ends_with(b"\r\n\r\n") {
-        s.read_exact(&mut x).unwrap();
-        b.push(x[0]);
-    }
-    let h = String::from_utf8_lossy(&b).to_string();
-    let n: usize = h
-        .lines()
-        .find_map(|l| {
-            l.to_ascii_lowercase()
-                .strip_prefix("content-length: ")
-                .map(str::to_string)
-        })
-        .unwrap()
-        .parse()
-        .unwrap();
-    let mut body = vec![0; n];
-    s.read_exact(&mut body).unwrap();
-    serde_json::from_slice(&body).unwrap()
-}
-
-fn reply(s: &mut TcpStream, status: &str, body: &str) {
-    write!(
-        s,
-        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    )
-    .unwrap();
+    common::request(s).1
 }
 
 /// Jev の応答を返すモックを立てて CLI を 1 回呼ぶ。返り値は (終了コード, stdout, 送られた本文)。
