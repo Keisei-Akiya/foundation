@@ -20,6 +20,9 @@ class HookContext:
     def register_hook(self, name, callback):
         self.hooks[name] = callback
 
+    def register_skill(self, name, path, description=""):
+        pass
+
 
 class NativeConfigProtectionTests(unittest.TestCase):
     def setUp(self):
