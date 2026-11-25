@@ -41,7 +41,7 @@ fn defaults_typesafe_and_jev_shapes() {
 #[test]
 fn provider_and_model_are_restricted_to_jev() {
     let h = home("provider");
-    for p in ["openai", "microsoft", "other"] {
+    for p in ["openai", "other"] {
         let (c, _, e) = run(
             &["--provider", p, "--model", "jev-latest", "--dry-run"],
             SPEC,
@@ -218,4 +218,167 @@ fn remote_error_does_not_echo_key() {
     assert!(o.is_empty());
     assert!(e.contains("HTTP 401"));
     assert!(!e.contains(key));
+}
+
+const MS_ARGS: &[&str] = &["--provider", "microsoft"];
+
+fn ms_args<'a>(extra: &[&'a str]) -> Vec<&'a str> {
+    MS_ARGS
+        .iter()
+        .copied()
+        .chain(extra.iter().copied())
+        .collect()
+}
+
+#[test]
+fn microsoft_dry_run_uses_foundry_path_and_jev_shaped_body() {
+    let h = home("ms-dry");
+    let (c, o, e) = run(
+        &ms_args(&["--dry-run"]),
+        SPEC,
+        &[("MS_DECISION_ENDPOINT", "https://res.services.ai.azure.com/")],
+        &h,
+    );
+    assert_eq!(c, 0, "{e}");
+    let v: Value = serde_json::from_str(&o).unwrap();
+    assert_eq!(
+        v["url"],
+        "https://res.services.ai.azure.com/providers/microsoft/v1/systemone"
+    );
+    assert_eq!(v["body"]["model"], "Microsoft-Decision-1.1");
+    assert_eq!(v["body"]["questions"]["duplicate"]["type"], "noul");
+}
+
+#[test]
+fn microsoft_sends_entra_bearer_to_decision_path_and_does_not_echo_it() {
+    let h = home("ms-live");
+    let token = "entra-token-from-env";
+    let l = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", l.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        let mut s = accept(&l);
+        let (headers, b) = request(&mut s);
+        let lower = headers.to_lowercase();
+        assert!(lower.starts_with("post /providers/microsoft/v1/systemone "));
+        assert!(lower.contains("authorization: bearer entra-token-from-env"));
+        assert!(!lower.contains("api-key"));
+        assert_eq!(b["model"], "my-deployment");
+        reply(
+            &mut s,
+            "200 OK",
+            r#"{"answers":{"duplicate":{"noul":0.8}}}"#,
+        );
+    });
+    let (c, o, e) = run(
+        &ms_args(&["--model", "my-deployment"]),
+        SPEC,
+        &[
+            ("MS_DECISION_ENDPOINT", &base),
+            ("AZURE_ENTRA_TOKEN", token),
+        ],
+        &h,
+    );
+    server.join().unwrap();
+    assert_eq!(c, 0, "{e}");
+    assert!(o.contains("0.8"));
+    assert!(!o.contains(token) && !e.contains(token));
+}
+
+#[test]
+fn microsoft_falls_back_to_az_for_the_token() {
+    let h = home("ms-az");
+    let bin = h.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let az = bin.join("az");
+    std::fs::write(
+        &az,
+        "#!/bin/sh\n[ \"$1 $2\" = \"account get-access-token\" ] && echo token-from-az\n",
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&az, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let l = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", l.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        let mut s = accept(&l);
+        let (headers, _) = request(&mut s);
+        assert!(headers
+            .to_lowercase()
+            .contains("authorization: bearer token-from-az"));
+        reply(&mut s, "200 OK", r#"{"answers":{}}"#);
+    });
+    let path = format!("{}:/usr/bin:/bin", bin.display());
+    let (c, _, e) = run(
+        MS_ARGS,
+        SPEC,
+        &[("MS_DECISION_ENDPOINT", &base), ("PATH", &path)],
+        &h,
+    );
+    server.join().unwrap();
+    assert_eq!(c, 0, "{e}");
+}
+
+#[test]
+fn microsoft_requires_endpoint_token_and_safe_urls() {
+    let h = home("ms-validate");
+    let (c, _, e) = run(&ms_args(&["--dry-run"]), SPEC, &[], &h);
+    assert_eq!(c, 2);
+    assert!(e.contains("MS_DECISION_ENDPOINT"));
+
+    let empty = h.join("empty-bin");
+    std::fs::create_dir_all(&empty).unwrap();
+    let (c, _, e) = run(
+        MS_ARGS,
+        SPEC,
+        &[
+            ("MS_DECISION_ENDPOINT", "https://res.services.ai.azure.com"),
+            ("PATH", empty.to_str().unwrap()),
+        ],
+        &h,
+    );
+    assert_eq!(c, 2);
+    assert!(e.contains("AZURE_ENTRA_TOKEN"));
+
+    for url in [
+        "http://res.services.ai.azure.com",
+        "https://user:pw@res.services.ai.azure.com",
+        "https://res.services.ai.azure.com/path",
+        "https://res.services.ai.azure.com/?q=1",
+        "https://res.services.ai.azure.com/#f",
+    ] {
+        let (c, _, e) = run(
+            &ms_args(&["--dry-run"]),
+            SPEC,
+            &[("MS_DECISION_ENDPOINT", url)],
+            &h,
+        );
+        assert_eq!(c, 2, "url={url}");
+        assert!(!e.contains("pw@"), "url={url}");
+    }
+}
+
+#[test]
+fn model_is_checked_per_provider_regardless_of_arg_order() {
+    let h = home("ms-model");
+    let (c, _, e) = run(
+        &[
+            "--model",
+            "jev-preview",
+            "--provider",
+            "typesafe",
+            "--dry-run",
+        ],
+        SPEC,
+        &[],
+        &h,
+    );
+    assert_eq!(c, 2);
+    assert!(e.contains("--model"));
+    let (c, _, e) = run(
+        &["--model", "dep", "--provider", "microsoft", "--dry-run"],
+        SPEC,
+        &[("MS_DECISION_ENDPOINT", "https://r.azure.com")],
+        &h,
+    );
+    assert_eq!(c, 0, "{e}");
 }

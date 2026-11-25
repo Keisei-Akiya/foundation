@@ -1,5 +1,10 @@
 fn dotenv_values() -> std::collections::HashMap<String, String> {
-    const ALLOWED: &[&str] = &["TYPESAFE_API_KEY", "TYPESAFE_BASE_URL"];
+    // Entra トークンは短命なので .env からは読まない。
+    const ALLOWED: &[&str] = &[
+        "TYPESAFE_API_KEY",
+        "TYPESAFE_BASE_URL",
+        "MS_DECISION_ENDPOINT",
+    ];
     let home = env_without_dotenv("HERMES_HOME")
         .map(std::path::PathBuf::from)
         .or_else(|| {

@@ -43,6 +43,8 @@ pub fn run(
         .env_remove("HERMES_HOME")
         .env_remove("TYPESAFE_API_KEY")
         .env_remove("TYPESAFE_BASE_URL")
+        .env_remove("MS_DECISION_ENDPOINT")
+        .env_remove("AZURE_ENTRA_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
