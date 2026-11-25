@@ -1,8 +1,9 @@
-pub(super) const USAGE: &str = "usage: foundation decide [--provider typesafe] [--spec <file|->] [--model <name>] [--dry-run] [--timeout <secs>]";
+pub(super) const USAGE: &str = "usage: foundation decide [--provider typesafe|microsoft] [--spec <file|->] [--model <name>] [--dry-run] [--timeout <secs>]";
 
 #[derive(Debug, PartialEq)]
 pub enum Provider {
     TypeSafe,
+    Microsoft,
 }
 
 pub(super) struct Options {
@@ -14,7 +15,7 @@ pub(super) struct Options {
 }
 
 pub(super) fn parse_args(args: &[String]) -> Result<Options, String> {
-    let provider = Provider::TypeSafe;
+    let mut provider = Provider::TypeSafe;
     let mut spec = "-".to_string();
     let mut model = None;
     let mut dry_run = false;
@@ -28,19 +29,14 @@ pub(super) fn parse_args(args: &[String]) -> Result<Options, String> {
         };
         match arg.as_str() {
             "--provider" => {
-                let value = value("--provider")?;
-                if value != "typesafe" {
-                    return Err(format!("unknown provider: {value}"));
-                }
+                provider = match value("--provider")?.as_str() {
+                    "typesafe" => Provider::TypeSafe,
+                    "microsoft" => Provider::Microsoft,
+                    other => return Err(format!("unknown provider: {other}")),
+                };
             }
             "--spec" => spec = value("--spec")?,
-            "--model" => {
-                let value = value("--model")?;
-                if value != "jev-latest" {
-                    return Err("--model supports only jev-latest".into());
-                }
-                model = Some(value);
-            }
+            "--model" => model = Some(value("--model")?),
             "--timeout" => {
                 timeout = value("--timeout")?
                     .parse::<u64>()
@@ -51,6 +47,16 @@ pub(super) fn parse_args(args: &[String]) -> Result<Options, String> {
             "--dry-run" => dry_run = true,
             other => return Err(format!("unknown argument: {other}")),
         }
+    }
+    // --model は --provider より前に書けるので、全引数を読んでから検証する。
+    match (&provider, model.as_deref()) {
+        (Provider::TypeSafe, Some(m)) if m != "jev-latest" => {
+            return Err("--model supports only jev-latest for typesafe".into());
+        }
+        (Provider::Microsoft, Some(m)) if m.trim().is_empty() => {
+            return Err("--model must be a non-empty deployment name".into());
+        }
+        _ => {}
     }
     Ok(Options {
         provider,

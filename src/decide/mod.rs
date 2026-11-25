@@ -1,5 +1,5 @@
-//! `foundation decide`: TypeSafe System One の Jev モデルを呼ぶ。
-//! 認証情報は環境変数からのみ読み、標準出力・標準エラーには出さない。
+//! `foundation decide`: TypeSafe System One の Jev と、Foundry の Microsoft-Decision を呼ぶ。
+//! 認証情報は環境変数（Microsoft は `az` も）からのみ読み、標準出力・標準エラーには出さない。
 
 mod args;
 mod env;
@@ -46,12 +46,8 @@ pub fn run(args: &[String]) -> i32 {
         );
         return 0;
     }
-    match communicate(
-        &spec,
-        opts.model.as_deref().unwrap_or("jev-latest"),
-        opts.timeout,
-    ) {
-        Ok((text, _usage)) => {
+    match send(&t, opts.timeout) {
+        Ok(text) => {
             match serde_json::from_str::<Value>(&text) {
                 Ok(v) => println!("{}", serde_json::to_string_pretty(&v).unwrap()),
                 Err(_) => println!("{text}"),
