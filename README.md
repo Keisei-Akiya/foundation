@@ -16,14 +16,17 @@ GitHub Releases のビルド済み成果物を取得し、SHA256を検証して�
 curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
 ```
 
-バージョンを固定する場合は `sh -s -- --version 0.0.28` を付ける。
+バージョンを固定する場合は `sh -s -- --version 0.0.29` を付ける。
 配置先は次のとおり。
 
 - `<HERMES_HOME>/bin/foundation`
 - `<HERMES_HOME>/foundation/`（adapters、skills、docs、VERSION）
 
-インストーラーはHermes CLIを使ってネイティブpluginを有効にし、`config.yaml` の `plugins.enabled` を更新する。
-それ以外の設定とhook許可設定は変更せず、起動中のgatewayも再起動しない。反映にはgatewayの再起動が必要である。
+インストーラーはHermes CLIを使ってネイティブpluginを有効にし、`skills.external_dirs` に `<HERMES_HOME>/foundation/skills` を登録する。
+既存の外部skillディレクトリは保持し、同じディレクトリを重複登録しない。
+この登録により、foundationのskillをHermesのskill検索対象に含める。
+それ以外の設定とhook許可設定は変更せず、起動中のgatewayも再起動しない。
+反映にはgatewayの再起動が必要である。
 Hermes CLIが見つからない場合は、配置を完了した後にエラーで停止する。
 プラグインを無効にする場合は `hermes plugins disable foundation` を実行する。
 
@@ -52,7 +55,7 @@ foundation update
 特定の版へ更新するには `--version X.Y.Z` を指定する。指定した版が存在しない場合はインストーラーの取得が失敗し、エラーで終了する。既存のバイナリや共有ツリーはその場合変更されない。新しい版から以前の版へ戻す（ダウングレードする）場合も同じ指定を使う。
 
 ```sh
-foundation update --version 0.0.28
+foundation update --version 0.0.29
 ```
 
 `version` と `update` の対象 Hermes home は、`--hermes-home DIR`、環境変数 `HERMES_HOME`、既定の `~/.hermes` の順で決まる。別のプロファイルを対象にする場合は、次のように両コマンドで指定する。

@@ -230,17 +230,6 @@ def _load_extensions(ctx: Any) -> None:
             logger.warning("foundation: extension %s failed to load: %s", path.name, error)
 
 
-def _register_skills(ctx: Any) -> None:
-    skills_dir = Path(__file__).resolve().parents[3] / "skills"
-    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
-        description = ""
-        for line in skill_md.read_text(encoding="utf-8").splitlines():
-            if line.startswith("description:"):
-                description = line.partition(":")[2].strip().strip("\"'")
-                break
-        ctx.register_skill(skill_md.parent.name, skill_md, description=description)
-
-
 def register(ctx: Any) -> None:
     ctx.register_hook("pre_tool_call", on_pre_tool_call)
     ctx.register_hook("post_tool_call", on_post_tool_call)
@@ -248,4 +237,3 @@ def register(ctx: Any) -> None:
     ctx.register_hook("on_session_finalize", on_session_finalize)
     ctx.register_hook("on_session_end", on_session_end)
     _load_extensions(ctx)
-    _register_skills(ctx)

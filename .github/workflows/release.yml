@@ -53,14 +53,38 @@ jobs:
         if: steps.check.outputs.release == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
-          printf '#!/bin/sh\n[ "$#" -eq 3 ] && [ "$1" = plugins ] && [ "$2" = enable ] && [ "$3" = foundation ]\n' > "$RUNNER_TEMP/bin/hermes"
+          cat > "$RUNNER_TEMP/bin/hermes" <<'EOF'
+          #!/bin/sh
+          set -eu
+          printf '%s\n' "$*" >> "$HERMES_TEST_LOG"
+          case "$1:$2" in
+            config:get)
+              [ "$#" -eq 4 ] && [ "$3" = skills.external_dirs ] && [ "$4" = --json ]
+              if [ -f "$HERMES_TEST_EXTERNAL_DIRS_FILE" ]; then cat "$HERMES_TEST_EXTERNAL_DIRS_FILE"; else printf '[]\n'; fi
+              ;;
+            config:set)
+              [ "$#" -eq 4 ] && [ "$3" = skills.external_dirs ]
+              printf '%s\n' "$4" > "$HERMES_TEST_EXTERNAL_DIRS_FILE"
+              ;;
+            plugins:enable)
+              [ "$#" -eq 3 ] && [ "$3" = foundation ]
+              printf 'plugins:\n  enabled:\n    - foundation\n' > "$HERMES_HOME/config.yaml"
+              ;;
+            *) exit 2 ;;
+          esac
+          EOF
           chmod +x "$RUNNER_TEMP/bin/hermes"
-          PATH="$RUNNER_TEMP/bin:$PATH" FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes"
+          HERMES_TEST_LOG="$RUNNER_TEMP/hermes-args" HERMES_TEST_EXTERNAL_DIRS_FILE="$RUNNER_TEMP/external-dirs.json" PATH="$RUNNER_TEMP/bin:$PATH" FOUNDATION_BASE_URL="file://$PWD/dist" sh install.sh --hermes-home "$RUNNER_TEMP/hermes"
           test -x "$RUNNER_TEMP/hermes/bin/foundation"
           test -f "$RUNNER_TEMP/hermes/foundation/adapters/hermes/plugin/plugin.yaml"
           test -L "$RUNNER_TEMP/hermes/plugins/foundation"
           test -f "$RUNNER_TEMP/hermes/plugins/foundation/plugin.yaml"
-          test ! -e "$RUNNER_TEMP/hermes/config.yaml"
+          test -f "$RUNNER_TEMP/hermes/config.yaml"
+          grep -Fx 'config get skills.external_dirs --json' "$RUNNER_TEMP/hermes-args"
+          printf -v expected_config_set 'config set skills.external_dirs ["%s"]' "$RUNNER_TEMP/hermes/foundation/skills"
+          grep -Fx "$expected_config_set" "$RUNNER_TEMP/hermes-args"
+          grep -Fx 'plugins enable foundation' "$RUNNER_TEMP/hermes-args"
+          python3 -c 'import json, sys; assert json.load(open(sys.argv[1])) == [sys.argv[2]]' "$RUNNER_TEMP/external-dirs.json" "$RUNNER_TEMP/hermes/foundation/skills"
           test ! -e "$RUNNER_TEMP/hermes/shell-hooks-allowlist.json"
       - name: Publish (creates the tag)
         if: steps.check.outputs.release == 'true'

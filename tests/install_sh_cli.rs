@@ -53,6 +53,7 @@ fn installs_archive_and_enables_hermes_plugin() {
     let install_dir = root.join("hermes-home");
     let fake_bin = root.join("fake-bin");
     let hermes_log = root.join("hermes-args");
+    let external_dirs_file = root.join("external-dirs.json");
 
     fs::create_dir_all(payload.join("bin")).unwrap();
     fs::create_dir_all(payload.join("adapters/hermes/plugin")).unwrap();
@@ -89,10 +90,11 @@ fn installs_archive_and_enables_hermes_plugin() {
     .unwrap();
 
     fs::create_dir_all(&fake_bin).unwrap();
+    fs::write(&external_dirs_file, "[\"/existing/skills\"]\n").unwrap();
     let hermes = fake_bin.join("hermes");
     fs::write(
         &hermes,
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HERMES_TEST_LOG\"\nprintf 'plugins:\\n  enabled:\\n    - foundation\\nother-setting: preserved\\n' > \"$HERMES_HOME/config.yaml\"\nprintf 'fake hermes enabled\\n'\n",
+        "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$HERMES_TEST_LOG\"\ncase \"$1:$2\" in\n  config:get)\n    case \"${HERMES_TEST_MODE:-}\" in\n      get-fail) printf 'config get failed for skills.external_dirs\\n' >&2; exit 3 ;;\n      invalid-json) printf '{invalid\\n'; exit 0 ;;\n      invalid-shape) printf '{\\\"private-setting\\\":\\\"do not expose\\\"}\\n'; exit 0 ;;\n      missing-config) printf '[]\\n'; exit 0 ;;\n    esac\n    if [ -f \"$HERMES_TEST_EXTERNAL_DIRS_FILE\" ]; then cat \"$HERMES_TEST_EXTERNAL_DIRS_FILE\"; else printf '[]\\n'; fi ;;\n  config:set)\n    if [ \"${HERMES_TEST_MODE:-}\" = set-fail ]; then printf 'config set rejected skills.external_dirs\\n' >&2; exit 4; fi\n    printf '%s\\n' \"$4\" > \"$HERMES_TEST_EXTERNAL_DIRS_FILE\" ;;\n  plugins:enable) printf 'plugins:\\n  enabled:\\n    - foundation\\nother-setting: preserved\\n' > \"$HERMES_HOME/config.yaml\" ;;\n  *) exit 2 ;;\nesac\n",
     )
     .unwrap();
     checked_output("chmod", &["+x", hermes.to_str().unwrap()], root);
@@ -130,6 +132,7 @@ fn installs_archive_and_enables_hermes_plugin() {
         .env("FOUNDATION_BASE_URL", &base_url)
         .env("PATH", &path)
         .env("HERMES_TEST_LOG", &hermes_log)
+        .env("HERMES_TEST_EXTERNAL_DIRS_FILE", &external_dirs_file)
         .output()
         .unwrap();
 
@@ -170,7 +173,17 @@ fn installs_archive_and_enables_hermes_plugin() {
     assert!(!install_dir.join("foundation/obsolete").exists());
     assert_eq!(
         fs::read_to_string(&hermes_log).unwrap(),
-        "plugins\nenable\nfoundation\n"
+        format!(
+            "config get skills.external_dirs --json\nconfig set skills.external_dirs [\"/existing/skills\", \"{}\"]\nplugins enable foundation\n",
+            install_dir.join("foundation/skills").display()
+        )
+    );
+    assert_eq!(
+        fs::read_to_string(&external_dirs_file).unwrap(),
+        format!(
+            "[\"/existing/skills\", \"{}\"]\n",
+            install_dir.join("foundation/skills").display()
+        )
     );
     assert_eq!(
         fs::read_to_string(install_dir.join("config.yaml")).unwrap(),
@@ -180,6 +193,85 @@ fn installs_archive_and_enables_hermes_plugin() {
         fs::read_to_string(install_dir.join("shell-hooks-allowlist.json")).unwrap(),
         "{\"allowlist\": []}\n"
     );
+    let rerun = Command::new("sh")
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/install.sh"))
+        .args(["--hermes-home", install_dir.to_str().unwrap()])
+        .env("FOUNDATION_BASE_URL", &base_url)
+        .env("PATH", &path)
+        .env("HERMES_TEST_LOG", &hermes_log)
+        .env("HERMES_TEST_EXTERNAL_DIRS_FILE", &external_dirs_file)
+        .output()
+        .unwrap();
+    assert!(
+        rerun.status.success(),
+        "idempotent reinstall failed: {}",
+        String::from_utf8_lossy(&rerun.stderr)
+    );
+    let baseline_external_dirs = fs::read(&external_dirs_file).unwrap();
+    for (mode, expected) in [
+        ("get-fail", "config get failed for skills.external_dirs"),
+        ("invalid-json", "invalid JSON at line 1, column 2"),
+        (
+            "invalid-shape",
+            "expected skills.external_dirs to be a JSON list of strings",
+        ),
+        ("set-fail", "config set rejected skills.external_dirs"),
+    ] {
+        let failed = Command::new("sh")
+            .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/install.sh"))
+            .args(["--hermes-home", install_dir.to_str().unwrap()])
+            .env("FOUNDATION_BASE_URL", &base_url)
+            .env("PATH", &path)
+            .env("HERMES_TEST_EXTERNAL_DIRS_FILE", &external_dirs_file)
+            .env("HERMES_TEST_LOG", &hermes_log)
+            .env("HERMES_TEST_MODE", mode)
+            .output()
+            .unwrap();
+        assert!(!failed.status.success(), "{mode} should fail");
+        let stderr = String::from_utf8_lossy(&failed.stderr);
+        assert!(stderr.contains(expected), "{mode}: {stderr}");
+        assert!(
+            !stderr.contains("private-setting") && !stderr.contains("do not expose"),
+            "{mode} leaked unrelated config: {stderr}"
+        );
+        assert_eq!(
+            fs::read(&external_dirs_file).unwrap(),
+            baseline_external_dirs
+        );
+    }
+
+    let missing_config_home = root.join("missing-config-home");
+    assert!(!missing_config_home.join("config.yaml").exists());
+    let missing_config_external_dirs = root.join("missing-config-external-dirs.json");
+    let missing_config = Command::new("sh")
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/install.sh"))
+        .args(["--hermes-home", missing_config_home.to_str().unwrap()])
+        .env("FOUNDATION_BASE_URL", &base_url)
+        .env("PATH", &path)
+        .env(
+            "HERMES_TEST_EXTERNAL_DIRS_FILE",
+            &missing_config_external_dirs,
+        )
+        .env("HERMES_TEST_LOG", &hermes_log)
+        .env("HERMES_TEST_MODE", "missing-config")
+        .output()
+        .unwrap();
+    assert!(
+        missing_config.status.success(),
+        "missing config was not initialized: {}",
+        String::from_utf8_lossy(&missing_config.stderr)
+    );
+    let missing_config_dirs: serde_json::Value =
+        serde_json::from_slice(&fs::read(&missing_config_external_dirs).unwrap()).unwrap();
+    assert_eq!(
+        missing_config_dirs,
+        serde_json::json!([missing_config_home
+            .join("foundation/skills")
+            .display()
+            .to_string()])
+    );
+    assert!(missing_config_home.join("config.yaml").exists());
+
     assert!(stdout.contains("hermes plugins disable foundation"));
 
     // Re-run with all installer utilities available except for Hermes itself.
@@ -192,6 +284,7 @@ fn installs_archive_and_enables_hermes_plugin() {
         "sha256sum",
         "install",
         "mktemp",
+        "python3",
         "uname",
         "cat",
         "mkdir",
@@ -243,6 +336,7 @@ fn installs_archive_and_enables_hermes_plugin() {
         .env("FOUNDATION_BASE_URL", &base_url)
         .env("PATH", &path)
         .env("HERMES_TEST_LOG", &physical_log)
+        .env("HERMES_TEST_EXTERNAL_DIRS_FILE", &external_dirs_file)
         .output()
         .unwrap();
     assert!(!physical.status.success());

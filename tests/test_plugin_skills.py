@@ -21,11 +21,7 @@ class Context:
         self.skills[name] = (path, description)
 
 
-def test_register_exposes_every_shipped_skill():
+def test_register_does_not_duplicate_skills_registered_from_external_dir():
     ctx = Context()
     plugin.register(ctx)
-    shipped = {p.parent.name for p in (ROOT / "skills").glob("*/SKILL.md")}
-    assert shipped and set(ctx.skills) == shipped
-    path, description = ctx.skills["wiki-search"]
-    assert path == ROOT / "skills/wiki-search/SKILL.md"
-    assert description.startswith("Use when answering from a local LLM wiki")
+    assert not ctx.skills
