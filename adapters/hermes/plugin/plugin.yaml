@@ -1,6 +1,6 @@
 name: foundation
-version: "0.0.7"
-description: Native pre-tool checks and post-tool observers
+version: "0.0.29"
+description: Native tool checks, observers, and session lifecycle hooks
 author: Keisei-Akiya
 kind: standalone
 provides_hooks:
@@ -12,6 +12,8 @@ provides_hooks:
   - post_api_request
   - on_session_start
   - on_session_finalize
+  - on_session_end
+  - post_compaction
 external_dependencies:
   - name: foundation
     check: "foundation --help"
