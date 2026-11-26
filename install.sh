@@ -2,12 +2,13 @@
 # foundation installer.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version 0.0.28
+#   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version X.Y.Z
 #
+# Replace X.Y.Z with the actual version of a published release.
 # Downloads the prebuilt release from GitHub Releases, verifies its SHA256, then
-# installs into <HERMES_HOME>. Hermes CLI updates only config.yaml's plugins.enabled
-# entry; hook allowlists are untouched and Hermes is never restarted.
-# The native plugin is always enabled.
+# installs into <HERMES_HOME>. Hermes CLI enables the native plugin and registers
+# the installed skills directory; hook allowlists are untouched and Hermes is
+# never restarted. The native plugin is always enabled.
 set -eu
 
 REPO="Keisei-Akiya/foundation"
@@ -62,7 +63,7 @@ case "$(uname -m)" in
   *) die "unsupported architecture: $(uname -m) (Linux x86_64 only)" ;;
 esac
 
-for cmd in curl tar sha256sum install mktemp; do
+for cmd in curl tar sha256sum install mktemp python3; do
   command -v "$cmd" >/dev/null 2>&1 || die "required command not found: $cmd"
 done
 
@@ -95,9 +96,11 @@ src="$tmp/x/foundation"
 [ -f "$src/VERSION" ] || die "archive is missing VERSION"
 installed_version="$(cat "$src/VERSION")"
 
+mkdir -p "$hermes_home"
+hermes_home="$(cd "$hermes_home" && pwd -P)"
 bin_dir="$hermes_home/bin"
 share_dir="$hermes_home/foundation"
-mkdir -p "$bin_dir" "$hermes_home"
+mkdir -p "$bin_dir"
 
 install -m 0755 "$src/bin/foundation" "$bin_dir/foundation.new"
 mv -f "$bin_dir/foundation.new" "$bin_dir/foundation"
@@ -136,11 +139,39 @@ EOF
 
 [ "$plugin_conflict" -eq 0 ] || die "installation completed but $plugin_link already exists and is not a symlink; refusing to enable the native plugin"
 command -v hermes >/dev/null 2>&1 || die "hermes CLI not found; installation completed but plugin could not be enabled"
+skills_dir="$share_dir/skills"
+if ! external_dirs="$(HERMES_HOME="$hermes_home" hermes config get skills.external_dirs --json 2>"$tmp/config-get.stderr")"; then
+  [ ! -s "$tmp/config-get.stderr" ] || {
+    printf 'install.sh: Hermes config get skills.external_dirs failed:\n' >&2
+    cat "$tmp/config-get.stderr" >&2
+  }
+  die "installation completed but Hermes skills configuration could not be read"
+fi
+merged_external_dirs="$(printf '%s' "$external_dirs" | python3 -I -c 'import json, sys
+try:
+    entries = json.load(sys.stdin)
+except json.JSONDecodeError as error:
+    print(f"invalid JSON at line {error.lineno}, column {error.colno}", file=sys.stderr)
+    raise SystemExit(1)
+if not isinstance(entries, list) or not all(isinstance(entry, str) for entry in entries):
+    print("expected skills.external_dirs to be a JSON list of strings", file=sys.stderr)
+    raise SystemExit(1)
+skills_dir = sys.argv[1]
+if skills_dir not in entries:
+    entries.append(skills_dir)
+print(json.dumps(entries, ensure_ascii=False))' "$skills_dir")" || die "installation completed but Hermes skills configuration is invalid; see the parsing diagnostic above"
+if ! HERMES_HOME="$hermes_home" hermes config set skills.external_dirs "$merged_external_dirs" >/dev/null 2>"$tmp/config-set.stderr"; then
+  [ ! -s "$tmp/config-set.stderr" ] || {
+    printf 'install.sh: Hermes config set skills.external_dirs failed:\n' >&2
+    cat "$tmp/config-set.stderr" >&2
+  }
+  die "installation completed but the foundation skills directory could not be registered with Hermes"
+fi
 HERMES_HOME="$hermes_home" hermes plugins enable foundation \
   || die "enabling the native plugin failed (the install itself is complete)"
 
 cat <<EOF
-The native plugin is enabled. Hermes CLI updated only config.yaml's plugins.enabled entry; the hook allowlist and running gateway were not changed. Restart the gateway to apply the plugin change.
+The native plugin is enabled and the foundation skills directory is registered with Hermes. The hook allowlist and running gateway were not changed. Restart the gateway to apply the plugin and skills changes.
 To disable the plugin, run:
   HERMES_HOME=$hermes_home hermes plugins disable foundation
 EOF

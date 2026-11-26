@@ -1,0 +1,21 @@
+{
+  "doc": [
+    {
+      "name": "hardcoded_version",
+      "type": "predicate",
+      "instructions": "この変更は、リリースや更新のたびに書き換えが必要になる固定値（バージョン番号など）を文書に書いているか。"
+    },
+    {
+      "name": "duplicate_statement",
+      "type": "predicate",
+      "instructions": "この変更で追加された文は、併記されたファイルまたは同じファイルの別の箇所に、同じ内容がすでに書かれているか。"
+    }
+  ],
+  "test": [
+    {
+      "name": "custom_class",
+      "type": "predicate",
+      "instructions": "この変更で追加されたテストコードは、テスト内で class 文によりクラスを新しく定義しているか。"
+    }
+  ]
+}
