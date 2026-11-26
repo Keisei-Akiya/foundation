@@ -40,14 +40,21 @@ pub fn run(
     c.arg(subcommand)
         .args(args)
         .env("HOME", h)
+        .env("CODEX_HOME", h.join(".codex"))
+        .env_remove("FOUNDATION_DECIDE_PROVIDER")
         .env_remove("HERMES_HOME")
         .env_remove("TYPESAFE_API_KEY")
         .env_remove("TYPESAFE_BASE_URL")
         .env_remove("MS_DECISION_ENDPOINT")
         .env_remove("AZURE_ENTRA_TOKEN")
+        .env_remove("OPENAI_API_KEY_DECISIONS")
+        .env_remove("OPENAI_BASE_URL")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    for (key, _) in std::env::vars().filter(|(key, _)| key.starts_with("OPENAI_")) {
+        c.env_remove(key);
+    }
     for (k, v) in envs {
         c.env(k, v);
     }

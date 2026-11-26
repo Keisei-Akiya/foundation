@@ -81,7 +81,7 @@ fn dotenv_value(raw: &str) -> Option<String> {
     )
 }
 
-fn env_without_dotenv(name: &str) -> Option<String> {
+pub(super) fn env_without_dotenv(name: &str) -> Option<String> {
     std::env::var(name)
         .ok()
         .map(|v| v.trim().to_string())

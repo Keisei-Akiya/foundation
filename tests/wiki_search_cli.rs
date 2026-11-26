@@ -1,4 +1,4 @@
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
@@ -188,7 +188,12 @@ fn run(root: &std::path::Path, endpoint: &str, extra: &[&str]) -> (i32, String, 
         .arg(root)
         .args(extra)
         .arg("How do pages relate?")
+        .env("FOUNDATION_DECIDE_PROVIDER", "typesafe")
         .env("TYPESAFE_BASE_URL", endpoint)
+        .env("HOME", root.join(".test-home"))
+        .env("CODEX_HOME", root.join(".test-home/.codex"))
+        .env_remove("OPENAI_API_KEY_DECISIONS")
+        .env_remove("OPENAI_BASE_URL")
         .env("TYPESAFE_API_KEY", "mock-key")
         .env_remove("HERMES_HOME")
         .stdin(Stdio::null())
@@ -201,6 +206,39 @@ fn run(root: &std::path::Path, endpoint: &str, extra: &[&str]) -> (i32, String, 
         String::from_utf8_lossy(&out.stderr).into(),
     )
 }
+fn run_openai(root: &std::path::Path, endpoint: &str) -> (i32, String, String) {
+    let home = root.join(".test-home");
+    std::fs::create_dir_all(&home).unwrap();
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_foundation"));
+    cmd.arg("wiki-search")
+        .arg("--wiki")
+        .arg(root)
+        .arg("--log-path")
+        .arg(root.join("openai-usage.jsonl"))
+        .arg("How do pages relate?")
+        .env("HOME", &home)
+        .env("FOUNDATION_DECIDE_PROVIDER", "openai")
+        .env("OPENAI_BASE_URL", endpoint)
+        .env("OPENAI_API_KEY_DECISIONS", "fake")
+        .env_remove("CODEX_HOME")
+        .env_remove("TYPESAFE_API_KEY")
+        .env_remove("TYPESAFE_BASE_URL")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (key, _) in std::env::vars().filter(|(key, _)| key.starts_with("OPENAI_")) {
+        if key != "OPENAI_BASE_URL" && key != "OPENAI_API_KEY_DECISIONS" {
+            cmd.env_remove(key);
+        }
+    }
+    let out = cmd.output().unwrap();
+    (
+        out.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out.stdout).into(),
+        String::from_utf8_lossy(&out.stderr).into(),
+    )
+}
+
 const ANSWERS: &str = r#"{"answers":{"page:one.md":{"probabilities":{"0":0.1,"1":0.2,"2":0.7},"legend":{"0":"none","1":"low","2":"high"}},"page:two.md":{"probabilities":{"0":0.5,"1":0.2,"2":0.1},"legend":{"0":"none","1":"low","2":"high"}},"page:three.md":{"probabilities":{"0":0.1,"1":0.3,"2":0.2},"legend":{"0":"none","1":"low","2":"high"}}}}"#;
 #[test]
 fn stage1_domain_questions_ignore_pipe_characters_outside_domain_table() {
@@ -624,4 +662,39 @@ fn malformed_probabilities_fail_clearly() {
     server.join().unwrap();
     assert_eq!(code, 1);
     assert!(err.contains("invalid Jev response"), "{err}");
+}
+
+#[test]
+fn openai_responses_are_normalized_through_both_wiki_search_stages() {
+    let root = wiki();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        let mut payloads = Vec::new();
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let payload = request(&mut stream);
+            let items = payload["questions"].as_array().unwrap();
+            let answers: Vec<Value> = items.iter().map(|q| {
+                let name = q["name"].as_str().unwrap();
+                let levels = q["levels"].as_array().unwrap();
+                let probabilities: Vec<Value> = levels.iter().enumerate().map(|(i,l)| json!({"value":i,"label":l["label"],"probability":if i==2 {0.7} else if i==1 {0.2} else {0.1}})).collect();
+                json!({"name":name,"type":"score","probabilities":probabilities})
+            }).collect();
+            let response = json!({"answers":answers,"usage":{"input_tokens":12,"output_tokens":4,"total_tokens":16}}).to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",response.len(),response).unwrap();
+            payloads.push(payload);
+        }
+        payloads
+    });
+    let (code, out, err) = run_openai(&root, &endpoint);
+    let payloads = server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(payloads.len(), 2);
+    assert_eq!(out.lines().count(), 3);
+    let line = std::fs::read_to_string(root.join("openai-usage.jsonl")).unwrap();
+    let record: Value = serde_json::from_str(line.trim()).unwrap();
+    assert_eq!(record["usage"]["input_tokens"], 24);
+    assert_eq!(record["usage"]["output_tokens"], 8);
+    assert_eq!(record["usage"]["total_tokens"], 32);
 }

@@ -5,7 +5,7 @@ description: Use when classifying a human's entry utterance with `foundation int
 
 # intake-hint
 
-`foundation intake-hint` は、直前の AI 発言と人間の最後の発話を Jev（`foundation decide` と同じ経路）に渡し、発話の性質を表すフラグを返す。
+`foundation intake-hint` は、直前の AI 発言と人間の最後の発話を `foundation decide` と同じ provider に渡し、発話の性質を表すフラグを返す。provider は `FOUNDATION_DECIDE_PROVIDER` で選び、未設定時は `openai-codex`。Jev を使う場合は `FOUNDATION_DECIDE_PROVIDER=typesafe` を設定する。OpenAI の応答はこの内部経路に限り Jev 形に正規化される。
 自信が持てないときは、自動で行動を選ばずに人間へ戻す。
 
 結果は参考情報である。承認や実行の制御には使わない。

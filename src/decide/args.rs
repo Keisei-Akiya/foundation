@@ -1,9 +1,11 @@
-pub(super) const USAGE: &str = "usage: foundation decide [--provider typesafe|microsoft] [--spec <file|->] [--model <name>] [--dry-run] [--timeout <secs>]";
+pub(super) const USAGE: &str = "usage: foundation decide [--provider typesafe|microsoft|openai|openai-codex] [--spec <file|->] [--model <name>] [--dry-run] [--timeout <secs>] (default: FOUNDATION_DECIDE_PROVIDER, else openai-codex)";
 
 #[derive(Debug, PartialEq)]
 pub enum Provider {
     TypeSafe,
     Microsoft,
+    OpenAi,
+    OpenAiCodex,
 }
 
 pub(super) struct Options {
@@ -14,8 +16,30 @@ pub(super) struct Options {
     pub(super) timeout: u64,
 }
 
+fn parse_provider(value: &str) -> Option<Provider> {
+    match value {
+        "typesafe" => Some(Provider::TypeSafe),
+        "microsoft" => Some(Provider::Microsoft),
+        "openai" => Some(Provider::OpenAi),
+        "openai-codex" => Some(Provider::OpenAiCodex),
+        _ => None,
+    }
+}
+
+pub(crate) fn resolve_provider(explicit: Option<&str>) -> Result<Provider, String> {
+    match explicit {
+        Some(name) => parse_provider(name).ok_or_else(|| format!("unknown provider: {name}")),
+        None => match crate::decide::env::env_without_dotenv("FOUNDATION_DECIDE_PROVIDER") {
+            Some(name) => parse_provider(&name).ok_or_else(|| {
+                "FOUNDATION_DECIDE_PROVIDER must be one of typesafe|microsoft|openai|openai-codex".into()
+            }),
+            None => Ok(Provider::OpenAiCodex),
+        },
+    }
+}
+
 pub(super) fn parse_args(args: &[String]) -> Result<Options, String> {
-    let mut provider = Provider::TypeSafe;
+    let mut provider = None;
     let mut spec = "-".to_string();
     let mut model = None;
     let mut dry_run = false;
@@ -29,11 +53,9 @@ pub(super) fn parse_args(args: &[String]) -> Result<Options, String> {
         };
         match arg.as_str() {
             "--provider" => {
-                provider = match value("--provider")?.as_str() {
-                    "typesafe" => Provider::TypeSafe,
-                    "microsoft" => Provider::Microsoft,
-                    other => return Err(format!("unknown provider: {other}")),
-                };
+                let name = value("--provider")?;
+                provider =
+                    Some(parse_provider(&name).ok_or_else(|| format!("unknown provider: {name}"))?);
             }
             "--spec" => spec = value("--spec")?,
             "--model" => model = Some(value("--model")?),
@@ -48,10 +70,19 @@ pub(super) fn parse_args(args: &[String]) -> Result<Options, String> {
             other => return Err(format!("unknown argument: {other}")),
         }
     }
+    let provider = resolve_provider(provider.as_ref().map(|p| match p {
+        Provider::TypeSafe => "typesafe",
+        Provider::Microsoft => "microsoft",
+        Provider::OpenAi => "openai",
+        Provider::OpenAiCodex => "openai-codex",
+    }))?;
     // --model は --provider より前に書けるので、全引数を読んでから検証する。
     match (&provider, model.as_deref()) {
         (Provider::TypeSafe, Some(m)) if m != "jev-latest" => {
             return Err("--model supports only jev-latest for typesafe".into());
+        }
+        (Provider::OpenAi | Provider::OpenAiCodex, Some(m)) if m != "gpt-6-luna" => {
+            return Err("--model supports only gpt-6-luna for openai".into());
         }
         (Provider::Microsoft, Some(m)) if m.trim().is_empty() => {
             return Err("--model must be a non-empty deployment name".into());

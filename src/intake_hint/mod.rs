@@ -32,7 +32,7 @@ pub fn run(args: &[String]) -> i32 {
         println!("{}", serde_json::to_string_pretty(&spec).unwrap());
         return 0;
     }
-    let result = match crate::decide::communicate(&spec, "jev-latest", timeout) {
+    let result = match crate::decide::communicate(&spec, timeout) {
         Ok((text, _usage)) => judge::judge(&text),
         // 本文は出さない。応答が得られなかったという事実だけを返す。
         Err(_) => json!({"route": "human", "reason": "undecidable"}),
