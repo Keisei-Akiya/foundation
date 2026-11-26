@@ -3,3 +3,5 @@ pre-commit:
   commands:
     precommit:
       run: mise run precommit
+    sync-plugin-manifest:
+      run: python3 scripts/sync_plugin_manifest.py && git add adapters/hermes/plugin/plugin.yaml
