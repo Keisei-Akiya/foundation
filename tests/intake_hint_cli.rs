@@ -42,6 +42,7 @@ fn with_jev(status: &'static str, body: String, input: &str) -> (i32, String, Va
         &[],
         input,
         &[
+            ("FOUNDATION_DECIDE_PROVIDER", "typesafe"),
             ("TYPESAFE_BASE_URL", &base),
             ("TYPESAFE_API_KEY", "mock-key"),
         ],
@@ -232,6 +233,7 @@ fn unreachable_jev_and_missing_key_return_human_route() {
         &["--timeout", "2"],
         INPUT,
         &[
+            ("FOUNDATION_DECIDE_PROVIDER", "typesafe"),
             ("TYPESAFE_BASE_URL", &base),
             ("TYPESAFE_API_KEY", "mock-key"),
         ],
@@ -297,4 +299,41 @@ fn embedded_questions_match_the_measured_spec() {
     let measured: Value =
         serde_json::from_str(include_str!("../tools/intake-hint/questions/five.json")).unwrap();
     assert_eq!(sent, measured);
+}
+
+#[test]
+fn openai_response_is_normalized_and_parsed_end_to_end() {
+    let h = home("openai");
+    let l = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", l.local_addr().unwrap());
+    let body = json!({"answers":[
+        {"name":"proposal","type":"predicate","probability":0.9},
+        {"name":"new_task","type":"predicate","probability":0.05},
+        {"name":"discuss","type":"predicate","probability":0.1},
+        {"name":"standing_rule","type":"predicate","probability":0.02},
+        {"name":"reply","type":"choice","choice":"approve","probabilities":[{"value":"approve","probability":0.9},{"value":"none","probability":0.1}]}
+    ],"usage":{"input_tokens":12,"output_tokens":4,"total_tokens":16}}).to_string();
+    let server = thread::spawn(move || {
+        let mut s = accept(&l);
+        let sent = request(&mut s);
+        reply(&mut s, "200 OK", &body);
+        sent
+    });
+    let (code, out, err) = run(
+        &[],
+        INPUT,
+        &[
+            ("FOUNDATION_DECIDE_PROVIDER", "openai"),
+            ("OPENAI_BASE_URL", &base),
+            ("OPENAI_API_KEY_DECISIONS", "fake"),
+        ],
+        &h,
+    );
+    let sent = server.join().unwrap();
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(sent["questions"].as_array().unwrap().len(), 5);
+    let result = parse(&out);
+    assert_eq!(result["route"], "hint");
+    assert_eq!(result["flags"]["proposal"], true);
+    assert_eq!(result["reply"], "approve");
 }

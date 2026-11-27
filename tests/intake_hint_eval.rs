@@ -50,7 +50,8 @@ fn eval(args: &[&str], home: &Path, envs: &[(&str, &str)]) -> (i32, String, Stri
         .env("HOME", home)
         .env_remove("HERMES_HOME")
         .env_remove("TYPESAFE_API_KEY")
-        .env_remove("TYPESAFE_BASE_URL");
+        .env_remove("TYPESAFE_BASE_URL")
+        .env_remove("FOUNDATION_DECIDE_PROVIDER");
     for (k, v) in envs {
         c.env(k, v);
     }
@@ -142,7 +143,10 @@ fn four_and_five_flag_specs_pass_decide_dry_run() {
                 "--dry-run",
             ],
             &h,
-            &[("TYPESAFE_API_KEY", "dry-run-key")],
+            &[
+                ("FOUNDATION_DECIDE_PROVIDER", "typesafe"),
+                ("TYPESAFE_API_KEY", "dry-run-key"),
+            ],
         );
         assert_eq!(code, 0, "{variant}: {err}");
         assert_eq!(out.contains("standing_rule"), has_rule, "{variant}: {out}");
@@ -310,6 +314,7 @@ fn eval_counts_false_positives_and_misses_separately_for_synthetic_and_real() {
         ],
         &h,
         &[
+            ("FOUNDATION_DECIDE_PROVIDER", "typesafe"),
             ("TYPESAFE_API_KEY", "test-key"),
             ("TYPESAFE_BASE_URL", &base),
         ],
