@@ -1,13 +1,13 @@
 ---
 name: fp-rust-check
-description: Use when checking Rust code against fp-principles. clippy deny set plus manual review items.
+description: Use when checking Rust code against fp-principles. clippy deny set plus decide-based judgment questions.
 ---
 
 # fp-rust-check
 
 Rust のコードが `fp-principles` を守っているかを確認する手順をまとめる。
 原則と判断は `fp-principles` が正本である。
-確認は、lint で機械的に拾う部分と、レビューで人かエージェントが見る部分に分ける。
+確認は、lint で機械的に拾う部分と、判断モデルで設計判断を確認する部分に分ける。
 
 ## 機械チェック
 
@@ -37,14 +37,18 @@ pub mod pure {
 - `must_use_candidate` は、純粋な関数の戻り値を捨てる誤用を防ぐ。
 - 既存の `-D warnings` の clippy 実行と同じコマンドで確認できる。
 
-## レビューで見るもの
+## 判断モデルによるレビュー
 
-次は lint で書けないので、人かエージェントが見る。
+レビュー対象は、該当する Rust の実装だけでなく、状態・型・副作用・エラーの扱いを判断できる定義と利用箇所も含める。
+大きなリポジトリ全体ではなく、判断に必要なコードと文脈を入力ファイルにまとめる。
+原則と判断は `fp-principles` を正本とし、質問定義は `review-hint/questions.json` の `rust` を使う。
 
-- trait の裏に I/O が隠れていて、純粋層に漏れていないか。
-- newtype にすべき値が、生の `String` や `u64` のままになっていないか。
-- 状態遷移が `enum` か typestate で表されているか。
-- `Result` を握りつぶしていないか（`.ok()` で捨てるなど）。
+1. 上記のコードと文脈を `rust-review-input.txt` に用意する。
+2. `python3 -I "${HERMES_HOME:-$HOME/.hermes}/foundation/skills/review-hint/spec.py" rust rust-review-input.txt > rust-review-spec.json` で `foundation decide` 用の spec を作る。
+3. `foundation decide --dry-run --spec rust-review-spec.json` で送信先と本文を確認する。
+4. `foundation decide --spec rust-review-spec.json` を実行し、Rust の設計判断をレビューする。
+   `--dry-run` は送信しないため、判断結果は返さない。
+   この手順は判断モデルの応答を評価する閾値や合否判定を追加しない。
 
 ## 実測（clippy 0.1.97、使い捨ての crate）
 
