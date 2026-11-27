@@ -21,6 +21,29 @@ Noul は真偽で答えられる命題に使う。
 - 「この問い合わせは請求・返品・配送のいずれかに関する内容か」
   複数の担当カテゴリのいずれかに該当するかを確認する質問であり、その後の分類は Choice にする。
 
+`questions` の一要素（キー `asks_refund` は呼び出し側が決める id）:
+
+```json
+{
+  "asks_refund": {
+    "type": "noul",
+    "instructions": "問い合わせ本文は、注文代金の返金を明示的に求めているか",
+    "criteria": {
+      "true": "返金、払い戻し、代金の返還を求める記述がある",
+      "false": "返金を求める記述がない。返品や交換のみの依頼を含む"
+    }
+  }
+}
+```
+
+`answers` の一要素（`noul` は Yes の確率。値は説明用）:
+
+```json
+{
+  "asks_refund": { "type": "noul", "noul": 0.97 }
+}
+```
+
 ## 一次情報
 
 - [Noul](https://docs.typesafe.ai/primitives/noul): 質問形式と回答フィールド。
