@@ -2,9 +2,9 @@
 # foundation installer.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version 0.0.31
+#   curl -fsSL https://raw.githubusercontent.com/Keisei-Akiya/foundation/main/install.sh | sh -s -- --version X.Y.Z
 #
-# Replace 0.0.31 with the actual version of a published release.
+# Replace X.Y.Z with the actual version of a published release.
 # Downloads the prebuilt release from GitHub Releases, verifies its SHA256, then
 # installs into <HERMES_HOME>. Hermes CLI enables the native plugin and registers
 # the installed skills directory; hook allowlists are untouched and Hermes is
