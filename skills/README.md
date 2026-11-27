@@ -6,6 +6,7 @@
 ## 判断モデル
 
 - `decision-model-knowledge/`: 判断モデル、Jev、質問と回答の型の概念。
+- `decision-model-design/`: 目的から `state` と型付き質問を設計する。
 - `decide-cli/`: `foundation decide` の使い方。
 
 ## 検索
