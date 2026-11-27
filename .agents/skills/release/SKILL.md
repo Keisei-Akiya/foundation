@@ -29,5 +29,5 @@ version更新の要否は判断せず、下の基準で機械的に決める。
 
 1. `Cargo.toml` の `version` を上げる。0.0.x の間はpatchだけを上げる。
 2. `Cargo.lock` の `foundation` のversionも同じ値にそろえる。
-3. READMEと `install.sh` の冒頭コメントの例にあるversion（`--version X.Y.Z`）も新しい値に更新する。
+3. `adapters/hermes/plugin/plugin.yaml` の version と provides_hooks は手で直さない。コミット時に lefthook が `scripts/sync_plugin_manifest.py` で再生成し、CI が `tests/test_plugin_manifest.py` でずれを検出する。
 4. mainへマージしたら、`release` workflowの成功と `gh release view v<version>` で成果物の存在を確認する。
