@@ -1,5 +1,5 @@
 name: foundation
-version: "0.0.32"
+version: "0.0.33"
 description: Native tool checks, observers, and session lifecycle hooks
 author: Keisei-Akiya
 kind: standalone
