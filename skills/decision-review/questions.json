@@ -1,0 +1,53 @@
+{
+  "doc": [
+    {
+      "name": "hardcoded_version",
+      "type": "predicate",
+      "instructions": "この変更は、リリースや更新のたびに書き換えが必要になる固定値（バージョン番号など）を文書に書いているか。"
+    },
+    {
+      "name": "duplicate_statement",
+      "type": "predicate",
+      "instructions": "この変更で追加された文は、併記されたファイルまたは同じファイルの別の箇所に、同じ内容がすでに書かれているか。"
+    }
+  ],
+  "test": [
+    {
+      "name": "custom_class",
+      "type": "predicate",
+      "instructions": "この変更で追加されたテストコードは、テスト内で class 文によりクラスを新しく定義しているか。"
+    }
+  ],
+  "fp": [
+    {
+      "name": "effects_mixed_with_decisions",
+      "type": "predicate",
+      "instructions": "提示されたコードに、I/O、時刻、乱数、環境、外部プロセスなどの副作用と、ドメイン上の判断や計算を同じ処理に混在させている箇所があるか。"
+    },
+    {
+      "name": "implicit_or_invalid_states",
+      "type": "predicate",
+      "instructions": "提示されたコードに、状態や意味のある値を、複数の真偽値や区別のない文字列・数値で表し、不正な組み合わせや取り違えを許している箇所があるか。"
+    },
+    {
+      "name": "expected_failure_hidden",
+      "type": "predicate",
+      "instructions": "提示されたコードに、想定可能な失敗を無視する、握りつぶす、または既定値に置き換えて成功したかのように処理を続ける箇所があるか。"
+    },
+    {
+      "name": "branching_not_exhaustive",
+      "type": "predicate",
+      "instructions": "提示されたコードに、列挙されたデータの種類を場合分けするとき、未対応の種類を包括的な既定分岐で受け、種類が増えても気づけない箇所があるか。"
+    },
+    {
+      "name": "function_has_multiple_responsibilities",
+      "type": "predicate",
+      "instructions": "提示されたコードに、複数の異なる責務を一つの関数や処理へまとめ、名前の付いた小さな処理の合成として読めない箇所があるか。"
+    },
+    {
+      "name": "shared_mutable_state",
+      "type": "predicate",
+      "instructions": "提示された純粋な計算・判断のコードに、複数の処理から観測または変更できる共有可変状態があるか。副作用層に閉じ込められた共有可変状態は、この命題に当てはまらない。"
+    }
+  ]
+}
