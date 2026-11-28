@@ -17,27 +17,5 @@
       "type": "predicate",
       "instructions": "この変更で追加されたテストコードは、テスト内で class 文によりクラスを新しく定義しているか。"
     }
-  ],
-  "rust": [
-    {
-      "name": "hidden_effect_in_pure_layer",
-      "type": "predicate",
-      "instructions": "提示された Rust コードと利用箇所から、計算・判断を担う層に I/O、時刻、乱数、環境変数、外部プロセスなどの副作用が入り込んでいるか判断する。同じ入力で結果が変わる要因は、副作用層に置くか引数として渡す。trait の実装や呼び出し先も確認し、根拠となるコードを示す。"
-    },
-    {
-      "name": "semantic_value_without_newtype",
-      "type": "predicate",
-      "instructions": "提示された Rust コードと利用箇所から、ID、金額など意味の異なる値を生の String や整数のまま扱い、取り違えられる形になっているか判断する。private フィールドを持つ専用型で値の意味や検証済みであることを表す設計を踏まえ、型定義と利用箇所を根拠にする。"
-    },
-    {
-      "name": "state_not_encoded_in_enum_or_typestate",
-      "type": "predicate",
-      "instructions": "提示された Rust コードと利用箇所から、取りうる状態や順序のある状態遷移が bool やフラグの組み合わせなどで表され、無効な組み合わせを作れる形になっているか判断する。状態は enum で列挙し、順序のある遷移は typestate で表す設計を踏まえ、状態と遷移が分かるコードを根拠にする。"
-    },
-    {
-      "name": "result_failure_discarded",
-      "type": "predicate",
-      "instructions": "提示された Rust コードと利用箇所から、呼び出し側が扱うべき失敗を捨てる、確認せず無視する、または失敗値を既定値に置き換えて処理を続けているか判断する。想定できる失敗は Result などの戻り値に表し、呼び出し側が扱えるようにする設計を踏まえる。理由が不要な欠損として意図的に Optional へ変換している場合は、それだけで問題とせず、失敗の意味と呼び出し側の選択可能性をコードの根拠から判断する。"
-    }
   ]
 }

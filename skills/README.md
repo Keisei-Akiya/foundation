@@ -28,4 +28,4 @@
 - 書き方
   - `fp-rust/`: 原則を Rust の `enum`、newtype、`Result`、typestate に当てはめる書き方。
 - チェックの仕方
-  - `fp-rust-check/`: Rust の機械チェック（clippy の設定と `deny` の組）と、判断モデルに渡す関数型設計のレビュー質問。
+  - `fp-rust-check/`: Rust の機械チェック（clippy の設定と `deny` の組）と、Jev に聞く原子的な質問・判定表・測定結果。
