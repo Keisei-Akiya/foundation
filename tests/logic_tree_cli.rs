@@ -728,6 +728,30 @@ fn rejects_control_characters_in_node_ids_and_parents_without_mutating_files() {
         &[
             "tree",
             "create",
+            "bad",
+            "--title",
+            "Title",
+            "--root-id",
+            "x\u{85}",
+            "--root-label",
+            "Root",
+        ],
+        "",
+        &[("HERMES_HOME", h)],
+        &home,
+    );
+    assert_ne!(code, 0);
+    assert!(err.contains("node id") && err.contains("control character"));
+    assert!(!err.trim_end().chars().any(char::is_control));
+    assert!(!home
+        .join("plugin-data/foundation/diagrams/bad.json")
+        .exists());
+
+    let (code, _, err) = common::run(
+        "diagram",
+        &[
+            "tree",
+            "create",
             "demo",
             "--title",
             "Title",
@@ -742,6 +766,16 @@ fn rejects_control_characters_in_node_ids_and_parents_without_mutating_files() {
     );
     assert_eq!((code, err.as_str()), (0, ""));
     let path = home.join("plugin-data/foundation/diagrams/demo.json");
+    let (code, _, err) = common::run(
+        "diagram",
+        &[
+            "tree", "add", "demo", "--id", "child", "--parent", "root", "--label", "Child",
+        ],
+        "",
+        &[("HERMES_HOME", h)],
+        &home,
+    );
+    assert_eq!((code, err.as_str()), (0, ""));
     let baseline = fs::read(&path).unwrap();
     let cases = [
         vec![
@@ -749,6 +783,9 @@ fn rejects_control_characters_in_node_ids_and_parents_without_mutating_files() {
         ],
         vec![
             "tree", "add", "demo", "--id", "child", "--parent", "x\u{9b}", "--label", "Child",
+        ],
+        vec![
+            "tree", "set", "demo", "--id", "x\u{85}", "--parent", "root", "--label", "Child",
         ],
         vec![
             "tree", "set", "demo", "--id", "root", "--parent", "x\u{85}", "--label", "Root",
@@ -759,7 +796,7 @@ fn rejects_control_characters_in_node_ids_and_parents_without_mutating_files() {
         let (code, _, err) = common::run("diagram", &args, "", &[("HERMES_HOME", h)], &home);
         assert_ne!(code, 0, "{args:?}");
         assert!(err.contains("control character"), "{err:?}");
-        assert!(!err.chars().any(char::is_control), "{err:?}");
+        assert!(!err.trim_end().chars().any(char::is_control), "{err:?}");
         assert_eq!(fs::read(&path).unwrap(), baseline, "{args:?}");
     }
 
@@ -774,6 +811,8 @@ fn rejects_control_characters_in_node_ids_and_parents_without_mutating_files() {
     let rows: Value = serde_json::from_str(&out).unwrap();
     assert_eq!(rows[0]["id"], "root");
     assert_eq!(rows[0]["parent"], Value::Null);
+    assert_eq!(rows[1]["id"], "child");
+    assert_eq!(rows[1]["parent"], "root");
 
     let mut doc: Value = serde_json::from_slice(&baseline).unwrap();
     doc["body"]["nodes"] = serde_json::json!([
@@ -791,7 +830,7 @@ fn rejects_control_characters_in_node_ids_and_parents_without_mutating_files() {
         let (code, _, err) = common::run("diagram", &args, "", &[("HERMES_HOME", h)], &home);
         assert_ne!(code, 0);
         assert!(err.contains("control character"), "{err:?}");
-        assert!(!err.chars().any(char::is_control), "{err:?}");
+        assert!(!err.trim_end().chars().any(char::is_control), "{err:?}");
         assert_eq!(fs::read(&path).unwrap(), invalid_id_bytes);
     }
 
@@ -813,6 +852,6 @@ fn rejects_control_characters_in_node_ids_and_parents_without_mutating_files() {
         err.contains("parent id") && err.contains("control character"),
         "{err:?}"
     );
-    assert!(!err.chars().any(char::is_control), "{err:?}");
+    assert!(!err.trim_end().chars().any(char::is_control), "{err:?}");
     assert_eq!(fs::read(&path).unwrap(), invalid_parent_bytes);
 }

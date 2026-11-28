@@ -86,7 +86,6 @@ pub(super) fn run(args: &[String]) -> Result<String, (i32, String)> {
             }
             let id = &args[2];
             validate_id(id)?;
-            let mut doc = read(id)?;
             let node = Node {
                 id: args[4].clone(),
                 parent: if args[6] == "-" {
@@ -96,6 +95,11 @@ pub(super) fn run(args: &[String]) -> Result<String, (i32, String)> {
                 },
                 label: args[8].clone(),
             };
+            validate_node_identifier("node id", &node.id)?;
+            if let Some(parent) = node.parent.as_deref() {
+                validate_node_identifier("parent id", parent)?;
+            }
+            let mut doc = read(id)?;
             if args[1] == "add" {
                 if doc.body.nodes.iter().any(|n| n.id == node.id) {
                     return Err((1, format!("duplicate node id: {}", node.id)));
@@ -120,6 +124,7 @@ pub(super) fn run(args: &[String]) -> Result<String, (i32, String)> {
             }
             let id = &args[2];
             validate_id(id)?;
+            validate_node_identifier("node id", &args[3])?;
             let mut doc = read(id)?;
             let node_id = &args[3];
             if doc
@@ -183,7 +188,10 @@ fn validate_id(id: &str) -> Result<(), (i32, String)> {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
     {
-        Err((2, format!("invalid diagram id: {id}")))
+        Err((
+            2,
+            "invalid diagram id: use 1-80 ASCII letters, digits, hyphens, or underscores".into(),
+        ))
     } else {
         Ok(())
     }
@@ -210,6 +218,10 @@ fn validate(doc: &Document) -> Result<(), (i32, String)> {
             || n.label.len() > MAX_TEXT
         {
             return Err((1, "required node id/label is missing or too long".into()));
+        }
+        validate_node_identifier("node id", &n.id)?;
+        if let Some(parent) = n.parent.as_deref() {
+            validate_node_identifier("parent id", parent)?;
         }
         reject_ambiguous_glyphs("node id", &n.id)?;
         reject_ambiguous_glyphs("label", &n.label)?;
@@ -242,6 +254,15 @@ fn validate(doc: &Document) -> Result<(), (i32, String)> {
             }
             cursor = index[id].parent.as_deref();
         }
+    }
+    Ok(())
+}
+fn validate_node_identifier(field: &str, value: &str) -> Result<(), (i32, String)> {
+    if value.chars().any(char::is_control) {
+        return Err((
+            1,
+            format!("{field} contains a control character; use printable characters instead"),
+        ));
     }
     Ok(())
 }
