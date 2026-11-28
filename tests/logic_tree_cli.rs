@@ -165,6 +165,138 @@ fn validation_reports_duplicate_and_missing_parent_ids() {
 }
 
 #[test]
+fn rows_and_render_share_stable_branch_lines_and_fit_width() {
+    let home = common::home("logic-tree", "formatted-rows");
+    let h = home.to_str().unwrap();
+    for args in [
+        vec![
+            "tree",
+            "create",
+            "demo",
+            "--title",
+            "非常に長いタイトルです。これはタイトルの折り返し確認です",
+            "--root-id",
+            "root",
+            "--root-label",
+            "Root",
+        ],
+        vec![
+            "tree",
+            "add",
+            "demo",
+            "--id",
+            "first",
+            "--parent",
+            "root",
+            "--label",
+            "First child",
+        ],
+        vec![
+            "tree",
+            "add",
+            "demo",
+            "--id",
+            "leaf",
+            "--parent",
+            "first",
+            "--label",
+            "A long Japanese child label 日本語",
+        ],
+        vec![
+            "tree", "add", "demo", "--id", "last", "--parent", "root", "--label", "Last",
+        ],
+    ] {
+        let (code, _, err) = common::run("diagram", &args, "", &[("HERMES_HOME", h)], &home);
+        assert_eq!((code, err.as_str()), (0, ""));
+    }
+    let (code, rows_out, err) = common::run(
+        "diagram",
+        &["tree", "rows", "demo", "--width", "24"],
+        "",
+        &[("HERMES_HOME", h)],
+        &home,
+    );
+    assert_eq!((code, err.as_str()), (0, ""));
+    let rows: Value = serde_json::from_str(&rows_out).unwrap();
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows[1]["depth"], 1);
+    assert_eq!(rows[1]["parent"], "root");
+    assert!(
+        rows[1]["lines"].as_array().is_some(),
+        "rows must expose formatted physical lines"
+    );
+    let (code, rendered, err) = common::run(
+        "diagram",
+        &["tree", "render", "demo", "--width", "24"],
+        "",
+        &[("HERMES_HOME", h)],
+        &home,
+    );
+    assert_eq!((code, err.as_str()), (0, ""));
+    for row in rows {
+        for line in row["lines"].as_array().unwrap() {
+            assert!(
+                rendered.contains(line.as_str().unwrap()),
+                "render omitted row line: {line}"
+            );
+        }
+    }
+    assert!(rows[1]["lines"][0].as_str().unwrap().contains("├──"));
+    assert!(rows[3]["lines"][0].as_str().unwrap().contains("└──"));
+    assert!(rendered.contains("折り返し"));
+    assert!(rendered
+        .lines()
+        .all(|line| unicode_width::UnicodeWidthStr::width(line) <= 24));
+    let (code, _, err) = common::run(
+        "diagram",
+        &["tree", "render", "demo", "--width", "8"],
+        "",
+        &[("HERMES_HOME", h)],
+        &home,
+    );
+    assert_eq!(code, 1);
+    assert!(err.contains("width") && err.contains("increase"));
+}
+
+#[test]
+fn render_sanitizes_controls_and_keeps_wide_graphemes_within_width() {
+    let home = common::home("logic-tree", "unicode-layout");
+    let h = home.to_str().unwrap();
+    let (code, _, err) = common::run(
+        "diagram",
+        &[
+            "tree",
+            "create",
+            "unicode",
+            "--title",
+            "Title\nnext",
+            "--root-id",
+            "root",
+            "--root-label",
+            "日本語 👨‍👩‍👧‍👦\u{1b}[31mred\u{1b}[0m",
+        ],
+        "",
+        &[("HERMES_HOME", h)],
+        &home,
+    );
+    assert_eq!((code, err.as_str()), (0, ""));
+    let (code, rendered, err) = common::run(
+        "diagram",
+        &["tree", "render", "unicode", "--width", "28"],
+        "",
+        &[("HERMES_HOME", h)],
+        &home,
+    );
+    assert_eq!((code, err.as_str()), (0, ""));
+    assert!(!rendered.contains('\u{1b}'));
+    assert!(rendered.contains("↵"));
+    assert!(rendered.contains("👨‍👩‍👧‍👦"));
+    assert!(rendered
+        .lines()
+        .all(|line| unicode_width::UnicodeWidthStr::width(line) <= 28));
+}
+
+#[test]
 fn rows_are_fully_expanded_with_depth_and_parent_metadata() {
     let home = common::home("logic-tree", "rows");
     let h = home.to_str().unwrap();

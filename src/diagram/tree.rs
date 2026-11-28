@@ -4,7 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 const MAX_NODES: usize = 1000;
 const MAX_DEPTH: usize = 64;
@@ -36,6 +37,11 @@ struct Row<'a> {
     parent: Option<&'a str>,
     depth: usize,
     label: &'a str,
+    #[serde(skip)]
+    branch_prefix: String,
+    #[serde(skip)]
+    branch: &'static str,
+    lines: Vec<String>,
 }
 
 pub(super) fn run(args: &[String]) -> Result<String, (i32, String)> {
@@ -151,11 +157,18 @@ pub(super) fn run(args: &[String]) -> Result<String, (i32, String)> {
                 return Err(usage());
             };
             let doc = read(id)?;
-            let rows = expanded_rows(&doc)?;
+            let mut rows = expanded_rows(&doc)?;
+            let (title_lines, mut wrapped) = wrap_text(&doc.title, "", width)?;
+            for row in &mut rows {
+                let prefix = format!("{}{}── [{}] ", row.branch_prefix, row.branch, row.id);
+                let (lines, did_wrap) = wrap_text(row.label, &prefix, width)?;
+                row.lines = lines;
+                wrapped |= did_wrap;
+            }
             if args[1] == "rows" {
                 return serde_json::to_string(&rows).map_err(|e| (1, e.to_string()));
             }
-            Ok(render(&doc, &rows, width))
+            Ok(render(&title_lines, &rows, width, wrapped))
         }
         _ => Err(usage()),
     }
@@ -239,52 +252,102 @@ fn expanded_rows<'a>(doc: &'a Document) -> Result<Vec<Row<'a>>, (i32, String)> {
     fn visit<'a>(
         p: Option<&'a str>,
         d: usize,
+        ancestor_has_next: &[bool],
         c: &HashMap<Option<&'a str>, Vec<&'a Node>>,
         rows: &mut Vec<Row<'a>>,
     ) {
         if let Some(ns) = c.get(&p) {
-            for n in ns {
+            for (index, n) in ns.iter().enumerate() {
+                let has_next = index + 1 < ns.len();
+                let branch_prefix = ancestor_has_next
+                    .iter()
+                    .map(|has_next| if *has_next { "│   " } else { "    " })
+                    .collect::<String>();
                 rows.push(Row {
                     id: &n.id,
                     parent: n.parent.as_deref(),
                     depth: d,
                     label: &n.label,
+                    branch_prefix,
+                    branch: if has_next { "├" } else { "└" },
+                    lines: Vec::new(),
                 });
-                visit(Some(&n.id), d + 1, c, rows);
+                let mut child_ancestors = ancestor_has_next.to_vec();
+                child_ancestors.push(has_next);
+                visit(Some(&n.id), d + 1, &child_ancestors, c, rows);
             }
         }
     }
-    visit(None, 0, &children, &mut rows);
+    visit(None, 0, &[], &children, &mut rows);
     if rows.len() != doc.body.nodes.len() {
         return Err((1, "parent consistency check failed".into()));
     }
     Ok(rows)
 }
-fn render(doc: &Document, rows: &[Row<'_>], width: usize) -> String {
-    let mut out = format!("{}\n", doc.title);
+
+fn wrap_text(text: &str, prefix: &str, width: usize) -> Result<(Vec<String>, bool), (i32, String)> {
+    let prefix_width = UnicodeWidthStr::width(prefix);
+    if prefix_width >= width {
+        return Err((
+            1,
+            format!(
+                "tree prefix needs {prefix_width} columns; increase --width to at least {}",
+                prefix_width + 1
+            ),
+        ));
+    }
+    let continuation = " ".repeat(prefix_width);
+    let available = width - prefix_width;
+    let normalized: String = text
+        .chars()
+        .map(|ch| match ch {
+            '\n' | '\r' => '↵',
+            '\t' => '⇥',
+            ch if ch.is_control() => '�',
+            ch => ch,
+        })
+        .collect();
+    let mut lines = Vec::new();
+    let mut line = prefix.to_owned();
+    let mut used = 0;
     let mut wrapped = false;
-    for row in rows {
-        let prefix = format!("{}- [{}] ", "  ".repeat(row.depth), row.id);
-        let indent = " ".repeat(UnicodeWidthStr::width(prefix.as_str()));
-        let mut line = prefix.clone();
-        let mut used = UnicodeWidthStr::width(line.as_str());
-        for ch in row.label.chars() {
-            let cw = UnicodeWidthChar::width(ch).unwrap_or(0);
-            if used + cw > width && used > indent.len() {
-                out.push_str(&line);
-                out.push('\n');
-                line = indent.clone();
-                used = UnicodeWidthStr::width(line.as_str());
-                wrapped = true;
-            }
-            line.push(ch);
-            used += cw;
+    for grapheme in UnicodeSegmentation::graphemes(normalized.as_str(), true) {
+        let grapheme_width = UnicodeWidthStr::width(grapheme);
+        if used + grapheme_width > available && used > 0 {
+            lines.push(line);
+            line = continuation.clone();
+            used = 0;
+            wrapped = true;
         }
-        out.push_str(&line);
+        if grapheme_width > available {
+            return Err((
+                1,
+                format!(
+                    "text grapheme exceeds available width; increase --width to at least {}",
+                    prefix_width + grapheme_width
+                ),
+            ));
+        }
+        line.push_str(grapheme);
+        used += grapheme_width;
+    }
+    lines.push(line);
+    Ok((lines, wrapped))
+}
+
+fn render(title_lines: &[String], rows: &[Row<'_>], width: usize, wrapped: bool) -> String {
+    let mut out = title_lines.join("\n");
+    out.push('\n');
+    for row in rows {
+        out.push_str(&row.lines.join("\n"));
         out.push('\n');
     }
     if wrapped {
-        out.push_str("[折り返し表示あり]\n");
+        let marker = "[折り返しあり]";
+        if UnicodeWidthStr::width(marker) <= width {
+            out.push_str(marker);
+            out.push('\n');
+        }
     }
     out
 }
