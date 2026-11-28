@@ -32,11 +32,11 @@ struct Node {
     label: String,
 }
 #[derive(Serialize)]
-struct Row<'a> {
-    id: &'a str,
-    parent: Option<&'a str>,
+struct Row {
+    id: String,
+    parent: Option<String>,
     depth: usize,
-    label: &'a str,
+    label: String,
     #[serde(skip)]
     branch_prefix: String,
     #[serde(skip)]
@@ -161,7 +161,7 @@ pub(super) fn run(args: &[String]) -> Result<String, (i32, String)> {
             let (title_lines, mut wrapped) = wrap_text(&doc.title, "", width)?;
             for row in &mut rows {
                 let prefix = format!("{}{}── [{}] ", row.branch_prefix, row.branch, row.id);
-                let (lines, did_wrap) = wrap_text(row.label, &prefix, width)?;
+                let (lines, did_wrap) = wrap_text(&row.label, &prefix, width)?;
                 row.lines = lines;
                 wrapped |= did_wrap;
             }
@@ -195,6 +195,7 @@ fn validate(doc: &Document) -> Result<(), (i32, String)> {
     if doc.title.trim().is_empty() || doc.title.len() > MAX_TEXT {
         return Err((1, "required title is missing or too long".into()));
     }
+    reject_ambiguous_glyphs("title", &doc.title)?;
     if doc.body.nodes.is_empty() || doc.body.nodes.len() > MAX_NODES {
         return Err((
             1,
@@ -210,6 +211,8 @@ fn validate(doc: &Document) -> Result<(), (i32, String)> {
         {
             return Err((1, "required node id/label is missing or too long".into()));
         }
+        reject_ambiguous_glyphs("node id", &n.id)?;
+        reject_ambiguous_glyphs("label", &n.label)?;
         if !ids.insert(n.id.as_str()) {
             return Err((1, format!("duplicate node id: {}", n.id)));
         }
@@ -242,7 +245,24 @@ fn validate(doc: &Document) -> Result<(), (i32, String)> {
     }
     Ok(())
 }
-fn expanded_rows<'a>(doc: &'a Document) -> Result<Vec<Row<'a>>, (i32, String)> {
+fn reject_ambiguous_glyphs(field: &str, value: &str) -> Result<(), (i32, String)> {
+    if value.contains(['✔', '⚠']) {
+        return Err((
+            1,
+            format!(
+                "{field} contains width-ambiguous symbol ✔ or ⚠; use ✓, ✗, ?, or ASCII instead"
+            ),
+        ));
+    }
+    Ok(())
+}
+fn terminal_safe(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| if ch.is_control() { '�' } else { ch })
+        .collect()
+}
+fn expanded_rows(doc: &Document) -> Result<Vec<Row>, (i32, String)> {
     validate(doc)?;
     let mut children: HashMap<Option<&str>, Vec<&Node>> = HashMap::new();
     for n in &doc.body.nodes {
@@ -254,7 +274,7 @@ fn expanded_rows<'a>(doc: &'a Document) -> Result<Vec<Row<'a>>, (i32, String)> {
         d: usize,
         ancestor_has_next: &[bool],
         c: &HashMap<Option<&'a str>, Vec<&'a Node>>,
-        rows: &mut Vec<Row<'a>>,
+        rows: &mut Vec<Row>,
     ) {
         if let Some(ns) = c.get(&p) {
             for (index, n) in ns.iter().enumerate() {
@@ -264,10 +284,10 @@ fn expanded_rows<'a>(doc: &'a Document) -> Result<Vec<Row<'a>>, (i32, String)> {
                     .map(|has_next| if *has_next { "│   " } else { "    " })
                     .collect::<String>();
                 rows.push(Row {
-                    id: &n.id,
-                    parent: n.parent.as_deref(),
+                    id: terminal_safe(&n.id),
+                    parent: n.parent.as_deref().map(terminal_safe),
                     depth: d,
-                    label: &n.label,
+                    label: terminal_safe(&n.label),
                     branch_prefix,
                     branch: if has_next { "├" } else { "└" },
                     lines: Vec::new(),
@@ -335,7 +355,7 @@ fn wrap_text(text: &str, prefix: &str, width: usize) -> Result<(Vec<String>, boo
     Ok((lines, wrapped))
 }
 
-fn render(title_lines: &[String], rows: &[Row<'_>], width: usize, wrapped: bool) -> String {
+fn render(title_lines: &[String], rows: &[Row], width: usize, wrapped: bool) -> String {
     let mut out = title_lines.join("\n");
     out.push('\n');
     for row in rows {
@@ -352,14 +372,44 @@ fn render(title_lines: &[String], rows: &[Row<'_>], width: usize, wrapped: bool)
     out
 }
 fn path(id: &str) -> Result<PathBuf, (i32, String)> {
-    let dir = home()?.join("plugin-data/foundation/diagrams");
-    fs::create_dir_all(&dir).map_err(|e| (1, format!("create diagram directory: {e}")))?;
-    if fs::symlink_metadata(&dir)
-        .map_err(|e| (1, e.to_string()))?
-        .file_type()
-        .is_symlink()
-    {
-        return Err((1, "diagram directory must not be a symlink".into()));
+    let mut dir = home()?;
+    for component in ["plugin-data", "foundation", "diagrams"] {
+        dir.push(component);
+        match fs::symlink_metadata(&dir) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err((
+                    1,
+                    format!(
+                        "diagram storage path component must not be a symlink: {}",
+                        dir.display()
+                    ),
+                ));
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err((
+                    1,
+                    format!(
+                        "diagram storage path component is not a directory: {}",
+                        dir.display()
+                    ),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::DirBuilderExt;
+                    let mut builder = fs::DirBuilder::new();
+                    builder.mode(0o700);
+                    builder
+                        .create(&dir)
+                        .map_err(|e| (1, format!("create diagram directory: {e}")))?;
+                }
+                #[cfg(not(unix))]
+                fs::create_dir(&dir).map_err(|e| (1, format!("create diagram directory: {e}")))?;
+            }
+            Err(error) => return Err((1, format!("inspect diagram storage path: {error}"))),
+        }
     }
     Ok(dir.join(format!("{id}.json")))
 }
