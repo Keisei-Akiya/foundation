@@ -1,6 +1,6 @@
 """レビュー対象と質問セットから `foundation decide` の spec を標準出力へ出す。
 
-usage: python3 -I spec.py <doc|test|fp> <input-file>
+usage: python3 -I spec.py <dev> <input-file>
 """
 
 import json
