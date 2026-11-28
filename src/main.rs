@@ -146,6 +146,7 @@ mod config_protection;
 mod cost_tracker;
 mod decide;
 mod desktop_notify;
+mod diagram;
 mod doc_warning;
 mod evaluate_session;
 mod format_typecheck;
@@ -189,6 +190,9 @@ fn main() {
     if all.first().map(String::as_str) == Some("wiki-search") {
         std::process::exit(wiki_search::run(&all[1..]));
     }
+    if all.first().map(String::as_str) == Some("diagram") {
+        std::process::exit(diagram::run(&all[1..]));
+    }
     if all.first().map(String::as_str) == Some("cost-report") && all.len() == 1 {
         cost_tracker::report();
         return;
@@ -197,7 +201,7 @@ fn main() {
     let command = args.next().unwrap_or_default();
     if args.next().is_some() || hook_ids::find_by_subcommand(&command).is_none() {
         eprintln!(
-            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|decide|intake-hint|wiki-search|version|update [--check|--version X.Y.Z] [--hermes-home DIR]>"
+            "usage: foundation <config-protection|preflight|hookify|post-observer|lifecycle|decide|intake-hint|wiki-search|diagram|version|update [--check|--version X.Y.Z] [--hermes-home DIR]>"
         );
         std::process::exit(2);
     }
