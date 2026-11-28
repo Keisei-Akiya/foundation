@@ -561,7 +561,7 @@ fn creates_private_diagrams_directory_without_changing_shared_parent_modes() {
 }
 
 #[test]
-fn rendered_rows_never_emit_terminal_controls_from_title_ids_or_labels() {
+fn rendered_rows_never_emit_terminal_controls_from_title_or_labels() {
     let home = common::home("logic-tree", "terminal-controls");
     let h = home.to_str().unwrap();
     let (code, _, err) = common::run(
@@ -573,7 +573,7 @@ fn rendered_rows_never_emit_terminal_controls_from_title_ids_or_labels() {
             "--title",
             "Title\u{85}\u{1b}[31m",
             "--root-id",
-            "root\u{9b}31m",
+            "root",
             "--root-label",
             "Label",
         ],
@@ -589,9 +589,9 @@ fn rendered_rows_never_emit_terminal_controls_from_title_ids_or_labels() {
             "add",
             "demo",
             "--id",
-            "child\u{85}",
+            "child",
             "--parent",
-            "root\u{9b}31m",
+            "root",
             "--label",
             "Label\u{1b}[2J",
         ],
@@ -717,4 +717,102 @@ fn rejects_width_ambiguous_symbols_in_title_id_label_and_rows() {
     assert!(out.is_empty());
     assert!(err.contains("width-ambiguous symbol"));
     assert!(err.contains("✔") && err.contains("⚠"));
+}
+
+#[test]
+fn rejects_control_characters_in_node_ids_and_parents_without_mutating_files() {
+    let home = common::home("logic-tree", "unsafe-node-ids");
+    let h = home.to_str().unwrap();
+    let (code, _, err) = common::run(
+        "diagram",
+        &[
+            "tree",
+            "create",
+            "demo",
+            "--title",
+            "Title",
+            "--root-id",
+            "root",
+            "--root-label",
+            "Root",
+        ],
+        "",
+        &[("HERMES_HOME", h)],
+        &home,
+    );
+    assert_eq!((code, err.as_str()), (0, ""));
+    let path = home.join("plugin-data/foundation/diagrams/demo.json");
+    let baseline = fs::read(&path).unwrap();
+    let cases = [
+        vec![
+            "tree", "add", "demo", "--id", "x\u{85}", "--parent", "root", "--label", "Child",
+        ],
+        vec![
+            "tree", "add", "demo", "--id", "child", "--parent", "x\u{9b}", "--label", "Child",
+        ],
+        vec![
+            "tree", "set", "demo", "--id", "root", "--parent", "x\u{85}", "--label", "Root",
+        ],
+        vec!["tree", "remove", "demo", "x\u{9b}"],
+    ];
+    for args in cases {
+        let (code, _, err) = common::run("diagram", &args, "", &[("HERMES_HOME", h)], &home);
+        assert_ne!(code, 0, "{args:?}");
+        assert!(err.contains("control character"), "{err:?}");
+        assert!(!err.chars().any(char::is_control), "{err:?}");
+        assert_eq!(fs::read(&path).unwrap(), baseline, "{args:?}");
+    }
+
+    let (code, out, err) = common::run(
+        "diagram",
+        &["tree", "rows", "demo"],
+        "",
+        &[("HERMES_HOME", h)],
+        &home,
+    );
+    assert_eq!((code, err.as_str()), (0, ""));
+    let rows: Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(rows[0]["id"], "root");
+    assert_eq!(rows[0]["parent"], Value::Null);
+
+    let mut doc: Value = serde_json::from_slice(&baseline).unwrap();
+    doc["body"]["nodes"] = serde_json::json!([
+        {"id":"x\u{85}","parent":null,"label":"Root"},
+        {"id":"x\u{9b}","parent":"x\u{85}","label":"Child"}
+    ]);
+    let invalid_id_bytes = serde_json::to_vec(&doc).unwrap();
+    fs::write(&path, &invalid_id_bytes).unwrap();
+    for args in [
+        vec!["tree", "rows", "demo"],
+        vec![
+            "tree", "add", "demo", "--id", "next", "--parent", "x\u{85}", "--label", "Next",
+        ],
+    ] {
+        let (code, _, err) = common::run("diagram", &args, "", &[("HERMES_HOME", h)], &home);
+        assert_ne!(code, 0);
+        assert!(err.contains("control character"), "{err:?}");
+        assert!(!err.chars().any(char::is_control), "{err:?}");
+        assert_eq!(fs::read(&path).unwrap(), invalid_id_bytes);
+    }
+
+    doc["body"]["nodes"] = serde_json::json!([
+        {"id":"root","parent":null,"label":"Root"},
+        {"id":"child","parent":"x\u{85}","label":"Child"}
+    ]);
+    let invalid_parent_bytes = serde_json::to_vec(&doc).unwrap();
+    fs::write(&path, &invalid_parent_bytes).unwrap();
+    let (code, _, err) = common::run(
+        "diagram",
+        &["tree", "render", "demo"],
+        "",
+        &[("HERMES_HOME", h)],
+        &home,
+    );
+    assert_ne!(code, 0);
+    assert!(
+        err.contains("parent id") && err.contains("control character"),
+        "{err:?}"
+    );
+    assert!(!err.chars().any(char::is_control), "{err:?}");
+    assert_eq!(fs::read(&path).unwrap(), invalid_parent_bytes);
 }
