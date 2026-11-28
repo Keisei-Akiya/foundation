@@ -8,7 +8,9 @@ description: Use when writing Rust in a functional style. Maps fp-principles to 
 Rust で関数型の考え方を使って実装するときの書き方をまとめる。
 原則と判断は `fp-principles` が正本である。
 このスキルは、その原則を Rust の型、エラー処理、副作用の扱いに当てはめる部分だけを書く。
-書いたコードの確認は `fp-rust-check` で行う。
+判断モデルによる言語共通の確認は `decision-review` の `dev` 質問セットを使う。
+決定的な機械チェックはプロジェクトの hook を使う。
+複雑な設計判断は、必要な文脈を渡して LLM に確認させる。
 
 ## Rust での当てはめ
 
